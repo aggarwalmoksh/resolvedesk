@@ -4,7 +4,9 @@
 
 import { supabase } from './supabaseClient';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.DEV
+  ? '/api'
+  : 'https://resolvedesk-backend-nlt0.onrender.com/api';
 
 export const getAuthToken = () => localStorage.getItem('resolvedesk_token');
 export const setAuthToken = (token) => {
