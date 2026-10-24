@@ -77,21 +77,15 @@ router.post('/', requirePermission('can_manage_bots'), checkBotQuota, async (req
     }
 
     // 4. Save to store
-    const bot = store._coll('bots');
-    const newBot = {
+    const newBot = store.createBot({
       id: tempBotId,
       org_id: req.org.id,
       bot_token: cleanToken,
       bot_username: botInfo.username,
       bot_title: bot_title || botInfo.title || botInfo.username,
       secret_token: secretToken,
-      webhook_url: webhookUrl,
-      status: 'active',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    bot.push(newBot);
-    store.save();
+      webhook_url: webhookUrl
+    });
 
     res.status(201).json({
       status: 'success',
@@ -162,6 +156,75 @@ router.post('/:id/sync', requirePermission('can_manage_bots'), async (req, res) 
     });
   } catch (err) {
     res.status(400).json({ status: 'error', error: err.message });
+  }
+});
+
+
+/**
+ * POST /api/bots/:id/activate
+ * Activate a paused bot (swaps active bot if at plan limit)
+ */
+router.post('/:id/activate', requirePermission('can_manage_bots'), async (req, res) => {
+  try {
+    const targetBot = store.getBotById(req.params.id);
+    if (!targetBot || targetBot.org_id !== req.org.id) {
+      return res.status(404).json({ error: 'Bot not found in your organization' });
+    }
+
+    const orgBots = store.getBotsByOrg(req.org.id);
+    const activeBots = orgBots.filter(b => b.status === 'active' && b.id !== targetBot.id);
+
+    // If active bots meet max quota, pause the oldest active bot to make room
+    if (activeBots.length >= req.org.max_bots) {
+      const botToPause = activeBots[activeBots.length - 1];
+      store.updateBot(botToPause.id, { status: 'paused' });
+      try {
+        await deleteBotWebhook(botToPause.bot_token);
+        console.log(`⏸️  [Quota Shift] Paused bot @${botToPause.bot_username} to activate @${targetBot.bot_username}`);
+      } catch (e) {}
+    }
+
+    // Activate target bot and re-register webhook
+    store.updateBot(targetBot.id, { status: 'active' });
+    try {
+      if (targetBot.webhook_url && targetBot.secret_token) {
+        await registerBotWebhook(targetBot.bot_token, targetBot.webhook_url, targetBot.secret_token);
+      }
+    } catch (e) {}
+
+    res.json({
+      status: 'success',
+      message: `Bot @${targetBot.bot_username} is now active!`,
+      data: targetBot
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/bots/:id/pause
+ * Manually pause a bot and disconnect its webhook
+ */
+router.post('/:id/pause', requirePermission('can_manage_bots'), async (req, res) => {
+  try {
+    const targetBot = store.getBotById(req.params.id);
+    if (!targetBot || targetBot.org_id !== req.org.id) {
+      return res.status(404).json({ error: 'Bot not found in your organization' });
+    }
+
+    store.updateBot(targetBot.id, { status: 'paused' });
+    try {
+      await deleteBotWebhook(targetBot.bot_token);
+    } catch (e) {}
+
+    res.json({
+      status: 'success',
+      message: `Bot @${targetBot.bot_username} has been paused`,
+      data: targetBot
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

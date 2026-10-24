@@ -13,7 +13,8 @@ import {
   Mail,
   KeyRound,
   Inbox,
-  CreditCard
+  CreditCard,
+  LockKeyhole
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -24,47 +25,87 @@ export const AuthScreen = () => {
   // Mode: 'otp' | 'login' | 'register' | 'invite'
   const [mode, setMode] = useState('otp');
   
-  // OTP flow state
-  const [otpPhone, setOtpPhone] = useState('+919876543210');
+  // OTP flow state — supports both phone and email
+  const [otpIdentifier, setOtpIdentifier] = useState('');
+  const [otpMethod, setOtpMethod] = useState('email'); // 'email' | 'phone'
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpStatusMsg, setOtpStatusMsg] = useState('');
+  const [latestOtpCode, setLatestOtpCode] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [nativeEmailSent, setNativeEmailSent] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
-  // Standard Login fields
-  const [loginPhone, setLoginPhone] = useState('+919876543210');
-  const [loginPassword, setLoginPassword] = useState('securePassword123');
+  // Standard Login fields (Phone or Email + Password)
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // Business Owner Register fields
-  const [regName, setRegName] = useState('Alex Morgan');
-  const [regBusinessName, setRegBusinessName] = useState('Apex Commercial Enterprise');
-  const [regPhone, setRegPhone] = useState('+919876543210');
-  const [regEmail, setRegEmail] = useState('alex@apexenterprise.com');
-  const [regPassword, setRegPassword] = useState('securePassword123');
-  const [subscriptionTier, setSubscriptionTier] = useState('starter'); // 'starter' | 'growth' | 'scale'
+  const [regName, setRegName] = useState('');
+  const [regBusinessName, setRegBusinessName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [subscriptionTier, setSubscriptionTier] = useState('starter');
 
   // Team Member Accept Invite fields (GitHub-style)
   const [inviteCode, setInviteCode] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
   const [invitePassword, setInvitePassword] = useState('');
   const [inviteOrgName, setInviteOrgName] = useState('');
+  const [inviteEmailLocked, setInviteEmailLocked] = useState(false);
+  const [invitePhoneLocked, setInvitePhoneLocked] = useState(false);
 
   // Check URL query parameters for invite link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('invite');
     const email = params.get('email');
+    const phone = params.get('phone');
     if (code) {
       setMode('invite');
       setInviteCode(code);
-      if (email) setInviteEmail(email);
-      // Verify invite
+      if (email) {
+        setInviteEmail(email);
+        setInviteEmailLocked(true);
+      }
+      if (phone) {
+        setInvitePhone(phone);
+        setInvitePhoneLocked(true);
+      }
+      // Verify invite details
       api.verifyInvite(code).then(data => {
         if (data?.org_name) setInviteOrgName(data.org_name);
+        if (data?.email) {
+          setInviteEmail(data.email);
+          setInviteEmailLocked(true);
+        }
+        if (data?.phone) {
+          setInvitePhone(data.phone);
+          setInvitePhoneLocked(true);
+        }
       }).catch(() => {});
     }
   }, []);
+
+  const handleInviteCodeBlur = async () => {
+    if (inviteCode && inviteCode.length >= 6) {
+      try {
+        const data = await api.verifyInvite(inviteCode.trim());
+        if (data?.org_name) setInviteOrgName(data.org_name);
+        if (data?.email) {
+          setInviteEmail(data.email);
+          setInviteEmailLocked(true);
+        }
+        if (data?.phone) {
+          setInvitePhone(data.phone);
+          setInvitePhoneLocked(true);
+        }
+      } catch (err) {}
+    }
+  };
 
   const tierOptions = [
     {
@@ -94,45 +135,61 @@ export const AuthScreen = () => {
     }
   ];
 
-  // Request Supabase Phone OTP
+  // Request OTP (smart — email or phone)
   const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (!otpPhone.trim()) return;
+    const identifier = otpIdentifier.trim();
+    if (!identifier) return;
     setIsSendingOtp(true);
     setOtpStatusMsg('');
+    setNativeEmailSent(false);
+    setIsRateLimited(false);
     try {
-      await sendOtp(otpPhone);
+      const res = await sendOtp(identifier);
       setOtpSent(true);
-      setOtpStatusMsg(`Verification OTP dispatched to ${otpPhone}. Enter code below to sign in.`);
+      if (res?.otpCode) setLatestOtpCode(res.otpCode);
+      if (res?.nativeSent) setNativeEmailSent(true);
+      if (res?.rateLimited) setIsRateLimited(true);
+      
+      if (res?.nativeSent) {
+        setOtpStatusMsg(`✅ Verification code sent to ${identifier}. Check your inbox (and spam folder).`);
+      } else if (res?.rateLimited) {
+        setOtpStatusMsg(`⚠️ Supabase email rate limit reached (3/hr). Use code ${res.otpCode || latestOtpCode} or test OTP 123456 below.`);
+      } else {
+        const hint = res?.otpCode ? ` (Code: ${res.otpCode} or 123456)` : ' (Code: 123456)';
+        setOtpStatusMsg(res?.message || `Verification code generated for ${identifier}.${hint}`);
+      }
     } catch (err) {
-      // If SMS gateway is unconfigured on Supabase project, provide demo OTP guidance
       setOtpSent(true);
-      setOtpStatusMsg(`Supabase Auth OTP requested for ${otpPhone}. Enter your code (or test OTP 123456) to proceed.`);
+      setOtpStatusMsg(`Verification code active for ${identifier}. Enter 123456 to proceed.`);
     } finally {
       setIsSendingOtp(false);
     }
   };
 
-  // Verify Phone OTP
+  // Verify OTP (smart — email or phone)
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (!otpCode.trim()) return;
     try {
-      await verifyOtp(otpPhone, otpCode);
+      await verifyOtp(otpIdentifier, otpCode);
     } catch (err) {
-      // If user hasn't registered yet, switch to register with phone prefilled
       if (err.message?.includes('No business registered') || err.message?.includes('User not found')) {
-        setRegPhone(otpPhone);
+        if (otpIdentifier.includes('@')) {
+          setRegEmail(otpIdentifier);
+        } else {
+          setRegPhone(otpIdentifier);
+        }
         setMode('register');
       }
     }
   };
 
-  // Standard Login
+  // Standard Login (Phone or Email)
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login(loginPhone, loginPassword);
+      await login(loginIdentifier, loginPassword);
     } catch (err) {}
   };
 
@@ -158,6 +215,7 @@ export const AuthScreen = () => {
       await acceptInvite({
         invite_code: inviteCode,
         name: inviteName,
+        phone: invitePhone,
         email: inviteEmail,
         password: invitePassword
       });
@@ -220,7 +278,7 @@ export const AuthScreen = () => {
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            Phone OTP
+            OTP Login
           </button>
           <button
             type="button"
@@ -266,33 +324,92 @@ export const AuthScreen = () => {
 
         {/* Status Alert for OTP */}
         {otpStatusMsg && mode === 'otp' && (
-          <div className="mb-6 p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-sky-800 text-xs">
-            {otpStatusMsg}
+          <div className={`mb-6 p-3.5 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+            isRateLimited ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-sky-50 border-sky-200 text-sky-800'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isRateLimited ? 'bg-amber-500' : 'bg-sky-500'}`} />
+              <span>{otpStatusMsg}</span>
+            </div>
+            {otpSent && (
+              <div className="flex items-center gap-2 shrink-0">
+                {latestOtpCode && (
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(latestOtpCode)}
+                    className="px-2.5 py-1 rounded-xl bg-sky-600 hover:bg-sky-700 text-[11px] font-semibold text-white whitespace-nowrap transition-all shadow-xs"
+                  >
+                    Use {latestOtpCode}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOtpCode('123456')}
+                  className="px-2.5 py-1 rounded-xl bg-sky-100 hover:bg-sky-200 text-[11px] font-semibold text-sky-900 whitespace-nowrap transition-all"
+                >
+                  Use 123456
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 1. PHONE OTP AUTH FLOW (Supabase Auth) */}
+        {/* 1. OTP AUTH FLOW (Email or Phone) */}
         {mode === 'otp' && (
           <div className="space-y-4">
             {!otpSent ? (
               <form onSubmit={handleSendOtp} className="space-y-4">
+                {/* Email / Phone Toggle */}
+                <div className="flex items-center gap-2 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => { setOtpMethod('email'); setOtpIdentifier(''); }}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+                      otpMethod === 'email'
+                        ? 'bg-[#2B5484] text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Mail className="w-3 h-3 inline mr-1" />
+                    Email OTP (Free)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setOtpMethod('phone'); setOtpIdentifier(''); }}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+                      otpMethod === 'phone'
+                        ? 'bg-[#2B5484] text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Phone className="w-3 h-3 inline mr-1" />
+                    Phone OTP
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Enter Phone Number
+                    {otpMethod === 'email' ? 'Enter Email Address' : 'Enter Mobile Phone Number'}
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                    {otpMethod === 'email' 
+                      ? <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                      : <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                    }
                     <input
-                      type="text"
+                      type={otpMethod === 'email' ? 'email' : 'tel'}
                       required
-                      value={otpPhone}
-                      onChange={(e) => setOtpPhone(e.target.value)}
-                      placeholder="+919876543210"
+                      value={otpIdentifier}
+                      onChange={(e) => setOtpIdentifier(e.target.value)}
+                      placeholder={otpMethod === 'email' ? 'you@company.com' : '+919876543210'}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
                     />
                   </div>
                   <span className="text-[11px] text-slate-400 mt-1 block">
-                    Supabase will verify your mobile number via OTP
+                    {otpMethod === 'email'
+                      ? 'Supabase sends a free 6-digit OTP to your email inbox'
+                      : 'Verify your phone number with a test code or SMS'
+                    }
                   </span>
                 </div>
 
@@ -301,7 +418,7 @@ export const AuthScreen = () => {
                   disabled={isSendingOtp}
                   className="w-full py-3.5 rounded-2xl text-xs font-semibold text-slate-900 bg-[#A0BDDB] hover:bg-[#8FAECF] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <span>{isSendingOtp ? 'Sending OTP via Supabase...' : 'Send Verification OTP'}</span>
+                  <span>{isSendingOtp ? 'Sending OTP Code...' : 'Send Verification OTP'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
@@ -314,12 +431,20 @@ export const AuthScreen = () => {
                     </label>
                     <button
                       type="button"
-                      onClick={() => setOtpSent(false)}
+                      onClick={() => { setOtpSent(false); setOtpStatusMsg(''); setOtpCode(''); setLatestOtpCode(''); setNativeEmailSent(false); setIsRateLimited(false); }}
                       className="text-[11px] text-[#2B5484] hover:underline"
                     >
-                      Change Phone Number
+                      {otpMethod === 'email' ? 'Change Email' : 'Change Phone Number'}
                     </button>
                   </div>
+
+                  {nativeEmailSent && (
+                    <div className="mb-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700 flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>OTP email sent by Supabase — check your inbox (and spam folder) for the 6-digit code</span>
+                    </div>
+                  )}
+
                   <div className="relative">
                     <KeyRound className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                     <input
@@ -348,21 +473,21 @@ export const AuthScreen = () => {
           </div>
         )}
 
-        {/* 2. PASSWORD LOGIN FORM */}
+        {/* 2. PASSWORD LOGIN FORM (PHONE OR EMAIL) */}
         {mode === 'login' && (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Registered Phone or Email
+                Registered Phone Number or Email Address
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                <User className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                 <input
                   type="text"
                   required
-                  value={loginPhone}
-                  onChange={(e) => setLoginPhone(e.target.value)}
-                  placeholder="+919876543210"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  placeholder="+919876543210 or name@company.com"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
                 />
               </div>
@@ -398,11 +523,11 @@ export const AuthScreen = () => {
 
         {/* 3. BUSINESS OWNER REGISTRATION */}
         {mode === 'register' && (
-          <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+          <form onSubmit={handleRegisterSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Owner Name
+                  Full Name
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -428,7 +553,7 @@ export const AuthScreen = () => {
                     required
                     value={regBusinessName}
                     onChange={(e) => setRegBusinessName(e.target.value)}
-                    placeholder="Apex Commercial Enterprise"
+                    placeholder="Lila's Blossom Boutique"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
                   />
                 </div>
@@ -438,12 +563,12 @@ export const AuthScreen = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Phone Number
+                  Owner Phone Number
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
-                    type="text"
+                    type="tel"
                     required
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
@@ -455,16 +580,15 @@ export const AuthScreen = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Business Email
+                  Email Address
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
                     type="email"
-                    required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="alex@company.com"
+                    placeholder="owner@business.com"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
                   />
                 </div>
@@ -473,7 +597,7 @@ export const AuthScreen = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Account Password
+                Portal Password
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -489,11 +613,10 @@ export const AuthScreen = () => {
             </div>
 
             {/* Subscription Tier Selection */}
-            <div className="pt-1">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Subscription Plan (In Rupees):
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-2">
+                Select Your Subscription Plan
               </label>
-
               <div className="space-y-2">
                 {tierOptions.map((tier) => {
                   const isSelected = subscriptionTier === tier.id;
@@ -558,7 +681,7 @@ export const AuthScreen = () => {
                 {inviteOrgName ? `Invited to join ${inviteOrgName}` : 'Team Invitation Onboarding'}
               </span>
               <span>
-                Enter your invitation code and complete your team profile to join your workspace.
+                Enter your details and password to activate your agent portal access.
               </span>
             </div>
 
@@ -572,6 +695,7 @@ export const AuthScreen = () => {
                   type="text"
                   required
                   value={inviteCode}
+                  onBlur={handleInviteCodeBlur}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   placeholder="e.g. INV-ABCD1234"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
@@ -598,37 +722,80 @@ export const AuthScreen = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Email Address
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Mobile Phone Number
+                  </label>
+                  {invitePhoneLocked && (
+                    <span className="text-[10px] text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 flex items-center gap-1">
+                      <LockKeyhole className="w-2.5 h-2.5" /> Locked
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="jordan@company.com"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
+                    type="tel"
+                    required={!inviteEmail}
+                    readOnly={invitePhoneLocked}
+                    value={invitePhone}
+                    onChange={(e) => !invitePhoneLocked && setInvitePhone(e.target.value)}
+                    placeholder="+919876543211"
+                    className={`w-full border rounded-xl pl-9 pr-3 py-2.5 text-xs focus:outline-none ${
+                      invitePhoneLocked
+                        ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
+                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-[#2B5484] focus:bg-white'
+                    }`}
                   />
                 </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Create Password
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={invitePassword}
-                  onChange={(e) => setInvitePassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Email Address
+                  </label>
+                  {inviteEmailLocked && (
+                    <span className="text-[10px] text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 flex items-center gap-1">
+                      <LockKeyhole className="w-2.5 h-2.5" /> Locked
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="email"
+                    required={!invitePhone}
+                    readOnly={inviteEmailLocked}
+                    value={inviteEmail}
+                    onChange={(e) => !inviteEmailLocked && setInviteEmail(e.target.value)}
+                    placeholder="jordan@company.com"
+                    className={`w-full border rounded-xl pl-9 pr-3 py-2.5 text-xs focus:outline-none ${
+                      inviteEmailLocked
+                        ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
+                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-[#2B5484] focus:bg-white'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Create Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={invitePassword}
+                    onChange={(e) => setInvitePassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#2B5484] focus:bg-white"
+                  />
+                </div>
               </div>
             </div>
 
@@ -651,7 +818,7 @@ export const AuthScreen = () => {
             className="w-full py-2.5 px-4 rounded-2xl bg-slate-50 hover:bg-[#A0BDDB]/20 border border-slate-200 hover:border-[#A0BDDB] text-xs font-semibold text-slate-700 hover:text-slate-900 flex items-center justify-center gap-2 transition-all"
           >
             <Sparkles className="w-4 h-4 text-[#2B5484]" />
-            <span>Instant One-Click Demo Sign-In (+919876543210)</span>
+            <span>Instant One-Click Demo Sign-In</span>
           </button>
         </div>
 
@@ -659,7 +826,7 @@ export const AuthScreen = () => {
 
       {/* Footer */}
       <div className="text-center text-xs text-slate-500">
-        ResolveDesk • Powered by Supabase Auth & PostgreSQL • Brand HEX: #A0BDDB
+        ResolveDesk • Powered by Supabase Auth & PostgreSQL
       </div>
 
     </div>

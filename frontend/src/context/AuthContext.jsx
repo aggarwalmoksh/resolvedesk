@@ -130,6 +130,17 @@ export const AuthProvider = ({ children }) => {
       setUser(data.user);
       setOrg(data.org);
       setToken(data.token);
+
+      // Set Supabase session if returned
+      if (data.supabaseSession?.access_token) {
+        try {
+          await supabase.auth.setSession({
+            access_token: data.supabaseSession.access_token,
+            refresh_token: data.supabaseSession.refresh_token
+          });
+        } catch (e) { /* non-blocking */ }
+      }
+
       return data;
     } catch (err) {
       setAuthError(err.message);
@@ -137,23 +148,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const sendOtp = async (phone) => {
+  // Smart OTP: works with both email and phone
+  const sendOtp = async (identifier) => {
     setAuthError(null);
     try {
-      return await api.sendPhoneOtp(phone);
+      return await api.sendOtp(identifier);
     } catch (err) {
       setAuthError(err.message);
       throw err;
     }
   };
 
-  const verifyOtp = async (phone, tokenCode) => {
+  const verifyOtp = async (identifier, tokenCode) => {
     setAuthError(null);
     try {
-      const data = await api.verifyPhoneOtp(phone, tokenCode);
+      const data = await api.verifyOtp(identifier, tokenCode);
       setUser(data.user);
       setOrg(data.org);
       setToken(data.token);
+
+      // Set Supabase session if returned (email OTP flow)
+      if (data.supabaseSession?.access_token) {
+        try {
+          await supabase.auth.setSession({
+            access_token: data.supabaseSession.access_token,
+            refresh_token: data.supabaseSession.refresh_token
+          });
+        } catch (e) { /* non-blocking */ }
+      }
+
       return data;
     } catch (err) {
       setAuthError(err.message);

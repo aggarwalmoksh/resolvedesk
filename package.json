@@ -1,11 +1,13 @@
 {
   "name": "resolvedesk",
   "version": "2.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "npm --prefix backend run dev",
+    "dev": "node run-all.js",
+    "dev:all": "node run-all.js",
+    "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build",
-    "start": "npm --prefix backend start",
+    "start": "node run-all.js",
     "test": "npm --prefix backend test",
     "set-webhook": "npm --prefix backend run set-webhook",
     "get-webhook": "npm --prefix backend run get-webhook",

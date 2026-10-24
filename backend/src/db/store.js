@@ -93,11 +93,12 @@ class Store {
 
   // Organizations
   createOrg({ id = null, name, phone, subscription_tier = 'starter' }) {
+    const safePhone = (phone || '+910000000000').slice(0, 32);
     const plan = PLANS[subscription_tier] || PLANS.starter;
     const org = {
       id: id || crypto.randomUUID(),
       name,
-      phone,
+      phone: safePhone,
       subscription_tier: plan.id,
       max_bots: plan.max_bots,
       max_members: plan.max_members,
@@ -110,17 +111,17 @@ class Store {
 
     // Sync to Supabase PostgreSQL table
     if (supabase) {
-      supabase.from('organizations').insert({
+      supabase.from('organizations').upsert({
         id: org.id,
         name: org.name,
-        phone: org.phone,
+        phone: (org.phone || '+910000000000').slice(0, 32),
         subscription_tier: org.subscription_tier,
         max_bots: org.max_bots,
         max_members: org.max_members,
         ticket_seq: org.ticket_seq,
         created_at: org.created_at,
         updated_at: org.updated_at
-      }).then(({ error }) => {
+      }, { onConflict: 'id' }).then(({ error }) => {
         if (error) console.warn('⚠️ Supabase organizations sync note:', error.message);
         else console.log('⚡ [Supabase] Org synchronized:', org.name);
       }).catch(err => console.warn('Supabase org sync err:', err.message));
@@ -154,6 +155,7 @@ class Store {
       id: id || crypto.randomUUID(),
       org_id,
       name,
+      email: email ? email.toLowerCase().trim() : null,
       phone,
       password_hash: password_hash || null,
       role,
@@ -166,21 +168,40 @@ class Store {
     this.save();
 
     if (supabase) {
-      supabase.from('users').insert({
-        id: user.id,
-        org_id: user.org_id,
-        name: user.name,
-        phone: user.phone,
-        password_hash: user.password_hash,
-        role: user.role,
-        permissions: user.permissions,
-        is_active: user.is_active,
-        created_at: user.created_at,
-        updated_at: user.updated_at
-      }).then(({ error }) => {
-        if (error) console.warn('⚠️ Supabase users sync note:', error.message);
-        else console.log('⚡ [Supabase] User synchronized:', user.phone);
-      }).catch(err => console.warn('Supabase user sync err:', err.message));
+      const org = this.getOrgById(user.org_id);
+      const doUpsertUser = () => {
+        supabase.from('users').upsert({
+          id: user.id,
+          org_id: user.org_id,
+          name: user.name,
+          phone: String(user.phone || user.email || '+910000000000').slice(0, 32),
+          password_hash: user.password_hash,
+          role: user.role,
+          permissions: user.permissions,
+          is_active: user.is_active,
+          created_at: user.created_at,
+          updated_at: user.updated_at
+        }, { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.warn('⚠️ Supabase users sync note:', error.message);
+          else console.log('⚡ [Supabase] User synchronized:', user.name, user.phone);
+        }).catch(err => console.warn('Supabase user sync err:', err.message));
+      };
+
+      if (org) {
+        supabase.from('organizations').upsert({
+          id: org.id,
+          name: org.name,
+          phone: (org.phone || '+910000000000').slice(0, 32),
+          subscription_tier: org.subscription_tier,
+          max_bots: org.max_bots,
+          max_members: org.max_members,
+          ticket_seq: org.ticket_seq,
+          created_at: org.created_at,
+          updated_at: org.updated_at
+        }, { onConflict: 'id' }).then(() => doUpsertUser()).catch(() => doUpsertUser());
+      } else {
+        doUpsertUser();
+      }
     }
 
     return user;
@@ -191,7 +212,16 @@ class Store {
   }
 
   getUserByPhone(phone, orgId = null) {
-    return this._coll('users').find(u => u.phone === phone && (!orgId || u.org_id === orgId)) || null;
+    if (!phone) return null;
+    const clean = String(phone).replace(/\D/g, '');
+    if (clean.length < 5) return null;
+    return this._coll('users').find(u => {
+      if (!u.phone) return false;
+      const uClean = String(u.phone).replace(/\D/g, '');
+      const match = u.phone === phone || uClean === clean || 
+        (clean.length >= 10 && uClean.length >= 10 && (clean.slice(-10) === uClean.slice(-10)));
+      return orgId ? match && u.org_id === orgId : match;
+    }) || null;
   }
 
   getUserByEmail(email, orgId = null) {
@@ -255,21 +285,40 @@ class Store {
     this.save();
 
     if (supabase) {
-      supabase.from('bots').insert({
-        id: bot.id,
-        org_id: bot.org_id,
-        bot_token: bot.bot_token,
-        bot_username: bot.bot_username,
-        bot_title: bot.bot_title,
-        secret_token: bot.secret_token,
-        webhook_url: bot.webhook_url,
-        status: bot.status,
-        created_at: bot.created_at,
-        updated_at: bot.updated_at
-      }).then(({ error }) => {
-        if (error) console.warn('⚠️ Supabase bots sync note:', error.message);
-        else console.log('⚡ [Supabase] Bot synchronized:', bot.bot_username);
-      }).catch(err => console.warn('Supabase bot sync err:', err.message));
+      const org = this.getOrgById(bot.org_id);
+      const doUpsertBot = () => {
+        supabase.from('bots').upsert({
+          id: bot.id,
+          org_id: bot.org_id,
+          bot_token: bot.bot_token,
+          bot_username: bot.bot_username,
+          bot_title: bot.bot_title,
+          secret_token: bot.secret_token,
+          webhook_url: bot.webhook_url,
+          status: bot.status,
+          created_at: bot.created_at,
+          updated_at: bot.updated_at
+        }, { onConflict: 'bot_token' }).then(({ error }) => {
+          if (error) console.warn('⚠️ Supabase bots sync note:', error.message);
+          else console.log('⚡ [Supabase] Bot synchronized:', bot.bot_username);
+        }).catch(err => console.warn('Supabase bot sync err:', err.message));
+      };
+
+      if (org) {
+        supabase.from('organizations').upsert({
+          id: org.id,
+          name: org.name,
+          phone: (org.phone || '+910000000000').slice(0, 32),
+          subscription_tier: org.subscription_tier,
+          max_bots: org.max_bots,
+          max_members: org.max_members,
+          ticket_seq: org.ticket_seq,
+          created_at: org.created_at,
+          updated_at: org.updated_at
+        }, { onConflict: 'id' }).then(() => doUpsertBot()).catch(() => doUpsertBot());
+      } else {
+        doUpsertBot();
+      }
     }
 
     return bot;
@@ -294,21 +343,50 @@ class Store {
         phone: '+1000000000',
         subscription_tier: 'scale'
       });
-    } else if (supabase) {
-      supabase.from('organizations').upsert({
-        id: org.id,
-        name: org.name,
-        phone: org.phone,
-        subscription_tier: org.subscription_tier,
-        max_bots: org.max_bots,
-        max_members: org.max_members,
-        ticket_seq: org.ticket_seq,
-        created_at: org.created_at,
-        updated_at: org.updated_at
-      }).then(({ error }) => {
-        if (error) console.warn('⚠️ Supabase org sync note:', error.message);
-        else console.log('⚡ [Supabase] Organization synchronized:', org.name);
-      }).catch(err => console.warn('Supabase org sync err:', err.message));
+    } else if (supabase && org) {
+      try {
+        await supabase.from('organizations').upsert({
+          id: org.id,
+          name: org.name,
+          phone: (org.phone || '+910000000000').slice(0, 32),
+          subscription_tier: org.subscription_tier,
+          max_bots: org.max_bots,
+          max_members: org.max_members,
+          ticket_seq: org.ticket_seq,
+          created_at: org.created_at,
+          updated_at: org.updated_at
+        }, { onConflict: 'id' });
+      } catch (err) {}
+    }
+
+    // Check if bot already exists in Supabase
+    if (supabase) {
+      try {
+        const { data: remoteBot } = await supabase.from('bots').select('*').eq('bot_token', botToken).maybeSingle();
+        if (remoteBot) {
+          if (bot) {
+            const oldId = bot.id;
+            bot.id = remoteBot.id;
+            bot.org_id = remoteBot.org_id;
+            if (oldId !== remoteBot.id) {
+              for (const c of this._coll('complaints')) {
+                if (c.bot_id === oldId) {
+                  c.bot_id = remoteBot.id;
+                  c.org_id = remoteBot.org_id;
+                }
+              }
+            }
+          } else {
+            this._coll('bots').push(remoteBot);
+            bot = remoteBot;
+          }
+          this.save();
+          console.log(`🤖 [Bot Registry] Synced bot @${bot.bot_username} from Supabase (ID: ${bot.id})`);
+          return bot;
+        }
+      } catch (e) {
+        console.warn('Supabase remote bot lookup note:', e.message);
+      }
     }
 
     if (!bot) {
@@ -323,17 +401,39 @@ class Store {
         }
       } catch (e) {}
 
-      bot = this.createBot({
+      bot = {
+        id: crypto.randomUUID(),
         org_id: org.id,
         bot_token: botToken,
         bot_username: botUsername,
         bot_title: botTitle,
         secret_token: secretToken || '',
-        webhook_url: publicBaseUrl ? `${publicBaseUrl.replace(/\/+$/, '')}/telegram/webhook` : ''
-      });
-      console.log(`🤖 [Bot Registry] Initialized primary bot @${bot.bot_username} linked to org: ${org.name}`);
+        webhook_url: publicBaseUrl ? `${publicBaseUrl.replace(/\/+$/, '')}/telegram/webhook` : '',
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      this._coll('bots').push(bot);
+      this.save();
+
+      if (supabase) {
+        const { error } = await supabase.from('bots').upsert({
+          id: bot.id,
+          org_id: bot.org_id,
+          bot_token: bot.bot_token,
+          bot_username: bot.bot_username,
+          bot_title: bot.bot_title,
+          secret_token: bot.secret_token,
+          webhook_url: bot.webhook_url,
+          status: bot.status,
+          created_at: bot.created_at,
+          updated_at: bot.updated_at
+        }, { onConflict: 'bot_token' });
+        if (error) console.warn('⚠️ Supabase bot sync note:', error.message);
+        else console.log(`⚡ [Supabase] Bot synchronized: @${bot.bot_username}`);
+      }
     } else if (supabase) {
-      supabase.from('bots').upsert({
+      const { error } = await supabase.from('bots').upsert({
         id: bot.id,
         org_id: bot.org_id,
         bot_token: bot.bot_token,
@@ -344,10 +444,9 @@ class Store {
         status: bot.status,
         created_at: bot.created_at,
         updated_at: bot.updated_at
-      }).then(({ error }) => {
-        if (error) console.warn('⚠️ Supabase bot sync note:', error.message);
-        else console.log('⚡ [Supabase] Bot synchronized:', bot.bot_username);
-      }).catch(err => console.warn('Supabase bot sync err:', err.message));
+      }, { onConflict: 'bot_token' });
+      if (error) console.warn('⚠️ Supabase bot sync note:', error.message);
+      else console.log(`⚡ [Supabase] Bot synchronized: @${bot.bot_username}`);
     }
 
     return bot;
@@ -503,7 +602,7 @@ class Store {
             status: bot.status,
             created_at: bot.created_at,
             updated_at: bot.updated_at
-          });
+          }, { onConflict: 'bot_token' });
         }
 
         // 2. Guarantee Customer exists in Supabase
@@ -602,7 +701,43 @@ class Store {
 
     if (supabase) {
       try {
-        const { error } = await supabase.from('complaints').update({ ...updates, updated_at: complaint.updated_at }).eq('id', id);
+        // If assigned_to is set, ensure assigned user exists in Supabase to satisfy complaints_assigned_to_fkey
+        if (complaint.assigned_to) {
+          const assignee = this.getUserById(complaint.assigned_to);
+          if (assignee) {
+            const aOrg = this.getOrgById(assignee.org_id);
+            if (aOrg) {
+              await supabase.from('organizations').upsert({
+                id: aOrg.id,
+                name: aOrg.name,
+                phone: aOrg.phone,
+                subscription_tier: aOrg.subscription_tier,
+                max_bots: aOrg.max_bots,
+                max_members: aOrg.max_members,
+                ticket_seq: aOrg.ticket_seq,
+                created_at: aOrg.created_at,
+                updated_at: aOrg.updated_at
+              }, { onConflict: 'id' });
+            }
+            await supabase.from('users').upsert({
+              id: assignee.id,
+              org_id: assignee.org_id,
+              name: assignee.name,
+              phone: assignee.phone || (assignee.email ? assignee.email : 'N/A'),
+              password_hash: assignee.password_hash,
+              role: assignee.role,
+              permissions: assignee.permissions,
+              is_active: assignee.is_active,
+              created_at: assignee.created_at,
+              updated_at: assignee.updated_at
+            }, { onConflict: 'id' });
+          }
+        }
+
+        const cleanUpdates = { ...updates, updated_at: complaint.updated_at };
+        if (cleanUpdates.assigned_to === '') cleanUpdates.assigned_to = null;
+
+        const { error } = await supabase.from('complaints').update(cleanUpdates).eq('id', id);
         if (error) console.warn('Supabase complaint update note:', error.message);
       } catch (err) {
         console.warn('Supabase complaint update err:', err.message);
@@ -634,10 +769,61 @@ class Store {
 
     if (supabase) {
       try {
-        // Guarantee parent complaint exists in Supabase before message insertion
         const complaint = this.getComplaintById(msg.complaint_id);
         if (complaint) {
-          await supabase.from('complaints').upsert({
+          // 1. Guarantee bot and its organization exist in Supabase
+          const bot = this.getBotById(complaint.bot_id);
+          if (bot) {
+            try {
+              const bOrg = this.getOrgById(bot.org_id);
+              if (bOrg) {
+                await supabase.from('organizations').upsert({
+                  id: bOrg.id,
+                  name: bOrg.name,
+                  phone: bOrg.phone,
+                  subscription_tier: bOrg.subscription_tier,
+                  max_bots: bOrg.max_bots,
+                  max_members: bOrg.max_members,
+                  ticket_seq: bOrg.ticket_seq,
+                  created_at: bOrg.created_at,
+                  updated_at: bOrg.updated_at
+                }, { onConflict: 'id' });
+              }
+              await supabase.from('bots').upsert({
+                id: bot.id,
+                org_id: bot.org_id,
+                bot_token: bot.bot_token,
+                bot_username: bot.bot_username,
+                bot_title: bot.bot_title,
+                secret_token: bot.secret_token,
+                webhook_url: bot.webhook_url,
+                status: bot.status,
+                created_at: bot.created_at,
+                updated_at: bot.updated_at
+              }, { onConflict: 'bot_token' });
+            } catch (e) {}
+          }
+
+          // 2. Guarantee customer exists in Supabase
+          const customer = this.getCustomerById(complaint.customer_id);
+          if (customer) {
+            try {
+              await supabase.from('customers').upsert({
+                id: customer.id,
+                org_id: customer.org_id,
+                telegram_user_id: customer.telegram_user_id,
+                username: customer.username,
+                first_name: customer.first_name,
+                last_name: customer.last_name,
+                phone: customer.phone,
+                created_at: customer.created_at,
+                updated_at: customer.updated_at
+              }, { onConflict: 'id' });
+            } catch (e) {}
+          }
+
+          // 3. Guarantee complaint exists in Supabase
+          const { error: cErr } = await supabase.from('complaints').upsert({
             id: complaint.id,
             org_id: complaint.org_id,
             bot_id: complaint.bot_id,
@@ -650,9 +836,11 @@ class Store {
             status: complaint.status,
             created_at: complaint.created_at,
             updated_at: complaint.updated_at
-          });
+          }, { onConflict: 'id' });
+          if (cErr) console.warn('⚠️ Supabase parent complaint sync note:', cErr.message);
         }
 
+        // 4. Upsert message into Supabase
         const { error } = await supabase.from('complaint_messages').upsert({
           id: msg.id,
           complaint_id: msg.complaint_id,
@@ -662,9 +850,9 @@ class Store {
           message_text: msg.message_text,
           telegram_message_id: msg.telegram_message_id,
           created_at: msg.created_at
-        });
+        }, { onConflict: 'id' });
         if (error) console.warn('⚠️ Supabase complaint_messages sync note:', error.message);
-        else console.log('⚡ [Supabase] Message synchronized for complaint:', complaint_id);
+        else console.log('⚡ [Supabase] Message synchronized for complaint:', complaint?.ticket_number || complaint_id);
       } catch (err) {
         console.warn('Supabase message sync err:', err.message);
       }
@@ -697,20 +885,39 @@ class Store {
     this.save();
 
     if (supabase) {
-      supabase.from('invitations').insert({
-        id: invite.id,
-        org_id: invite.org_id,
-        phone: invite.phone,
-        role: invite.role,
-        permissions: invite.permissions,
-        invite_code: invite.invite_code,
-        status: invite.status,
-        created_at: invite.created_at,
-        expires_at: invite.expires_at
-      }).then(({ error }) => {
-        if (error) console.warn('⚠️ Supabase invitations sync note:', error.message);
-        else console.log('⚡ [Supabase] Invitation synchronized:', invite.invite_code);
-      }).catch(err => console.warn('Supabase invitation sync err:', err.message));
+      const org = this.getOrgById(invite.org_id);
+      const doUpsertInvite = () => {
+        supabase.from('invitations').upsert({
+          id: invite.id,
+          org_id: invite.org_id,
+          phone: String(invite.phone || invite.email || '+910000000000').slice(0, 32),
+          role: invite.role,
+          permissions: invite.permissions,
+          invite_code: invite.invite_code,
+          status: invite.status,
+          created_at: invite.created_at,
+          expires_at: invite.expires_at
+        }, { onConflict: 'invite_code' }).then(({ error }) => {
+          if (error) console.warn('⚠️ Supabase invitations sync note:', error.message);
+          else console.log('⚡ [Supabase] Invitation synchronized:', invite.invite_code);
+        }).catch(err => console.warn('Supabase invitation sync err:', err.message));
+      };
+
+      if (org) {
+        supabase.from('organizations').upsert({
+          id: org.id,
+          name: org.name,
+          phone: org.phone,
+          subscription_tier: org.subscription_tier,
+          max_bots: org.max_bots,
+          max_members: org.max_members,
+          ticket_seq: org.ticket_seq,
+          created_at: org.created_at,
+          updated_at: org.updated_at
+        }, { onConflict: 'id' }).then(() => doUpsertInvite()).catch(() => doUpsertInvite());
+      } else {
+        doUpsertInvite();
+      }
     }
 
     return invite;
@@ -739,6 +946,149 @@ class Store {
     return invite;
   }
 
+  
+  async syncWithSupabase() {
+    if (!supabase) return;
+    try {
+      // 1. Sync organizations both ways
+      const { data: remoteOrgs } = await supabase.from('organizations').select('*');
+      if (remoteOrgs && remoteOrgs.length > 0) {
+        for (const rOrg of remoteOrgs) {
+          const lOrg = this._coll('organizations').find(o => o.id === rOrg.id || o.name === rOrg.name);
+          if (lOrg) {
+            Object.assign(lOrg, rOrg);
+          } else {
+            this._coll('organizations').push(rOrg);
+          }
+        }
+      }
+
+      // Guarantee every local organization is in Supabase to satisfy FK bots_org_id_fkey
+      for (const org of this._coll('organizations')) {
+        try {
+          await supabase.from('organizations').upsert({
+            id: org.id,
+            name: org.name,
+            phone: org.phone,
+            subscription_tier: org.subscription_tier,
+            max_bots: org.max_bots,
+            max_members: org.max_members,
+            ticket_seq: org.ticket_seq,
+            created_at: org.created_at,
+            updated_at: org.updated_at
+          }, { onConflict: 'id' });
+        } catch (e) {}
+      }
+
+      // Guarantee every local user is in Supabase to satisfy FK complaints_assigned_to_fkey
+      for (const u of this._coll('users')) {
+        try {
+          await supabase.from('users').upsert({
+            id: u.id,
+            org_id: u.org_id,
+            name: u.name,
+            phone: String(u.phone || u.email || '+910000000000').slice(0, 32),
+            password_hash: u.password_hash,
+            role: u.role,
+            permissions: u.permissions,
+            is_active: u.is_active,
+            created_at: u.created_at,
+            updated_at: u.updated_at
+          }, { onConflict: 'id' });
+        } catch (e) {}
+      }
+
+      // Guarantee every invitation is in Supabase
+      for (const inv of this._coll('invitations')) {
+        try {
+          await supabase.from('invitations').upsert({
+            id: inv.id,
+            org_id: inv.org_id,
+            phone: String(inv.phone || inv.email || '+910000000000').slice(0, 32),
+            role: inv.role,
+            permissions: inv.permissions,
+            invite_code: inv.invite_code,
+            status: inv.status,
+            created_at: inv.created_at,
+            expires_at: inv.expires_at
+          }, { onConflict: 'invite_code' });
+        } catch (e) {}
+      }
+
+      // 2. Sync bots & remap complaint bot IDs
+      const { data: remoteBots } = await supabase.from('bots').select('*');
+      if (remoteBots && remoteBots.length > 0) {
+        for (const rBot of remoteBots) {
+          const lBot = this._coll('bots').find(b => b.bot_token === rBot.bot_token || b.bot_username === rBot.bot_username || b.id === rBot.id);
+          if (lBot) {
+            const oldId = lBot.id;
+            Object.assign(lBot, rBot);
+            if (oldId !== rBot.id) {
+              for (const c of this._coll('complaints')) {
+                if (c.bot_id === oldId) {
+                  c.bot_id = rBot.id;
+                  c.org_id = rBot.org_id;
+                }
+              }
+            }
+          } else {
+            this._coll('bots').push(rBot);
+          }
+        }
+      }
+
+      // 3. Sync customers & remap complaint customer IDs
+      const { data: remoteCusts } = await supabase.from('customers').select('*');
+      if (remoteCusts && remoteCusts.length > 0) {
+        for (const rCust of remoteCusts) {
+          const lCust = this._coll('customers').find(c => String(c.telegram_user_id) === String(rCust.telegram_user_id) || c.id === rCust.id);
+          if (lCust) {
+            const oldCustId = lCust.id;
+            Object.assign(lCust, rCust);
+            if (oldCustId !== rCust.id) {
+              for (const c of this._coll('complaints')) {
+                if (c.customer_id === oldCustId) {
+                  c.customer_id = rCust.id;
+                }
+              }
+            }
+          } else {
+            this._coll('customers').push(rCust);
+          }
+        }
+      }
+
+      // 4. Ensure local complaints are in Supabase
+      for (const complaint of this._coll('complaints')) {
+        const botExists = this._coll('bots').some(b => b.id === complaint.bot_id);
+        const custExists = this._coll('customers').some(c => c.id === complaint.customer_id);
+        if (botExists && custExists) {
+          try {
+            await supabase.from('complaints').upsert({
+              id: complaint.id,
+              org_id: complaint.org_id,
+              bot_id: complaint.bot_id,
+              customer_id: complaint.customer_id,
+              ticket_number: complaint.ticket_number,
+              title: complaint.title,
+              description: complaint.description,
+              category: complaint.category,
+              priority: complaint.priority,
+              status: complaint.status,
+              created_at: complaint.created_at,
+              updated_at: complaint.updated_at
+            }, { onConflict: 'id' });
+          } catch (e) {}
+        }
+      }
+
+      this.save();
+      console.log('⚡ [Supabase] Store synchronized with Supabase PostgreSQL.');
+    } catch (err) {
+      console.warn('⚠️ Supabase initial sync notice:', err.message);
+    }
+  }
+
   async syncAllToSupabase() {
     if (!supabase) return;
     try {
@@ -753,7 +1103,36 @@ class Store {
           ticket_seq: org.ticket_seq,
           created_at: org.created_at,
           updated_at: org.updated_at
-        });
+        }, { onConflict: 'id' });
+      }
+
+      for (const u of this._coll('users')) {
+        await supabase.from('users').upsert({
+          id: u.id,
+          org_id: u.org_id,
+          name: u.name,
+          phone: u.phone || (u.email ? u.email : 'N/A'),
+          password_hash: u.password_hash,
+          role: u.role,
+          permissions: u.permissions,
+          is_active: u.is_active,
+          created_at: u.created_at,
+          updated_at: u.updated_at
+        }, { onConflict: 'id' });
+      }
+
+      for (const inv of this._coll('invitations')) {
+        await supabase.from('invitations').upsert({
+          id: inv.id,
+          org_id: inv.org_id,
+          phone: inv.phone || (inv.email ? inv.email : 'N/A'),
+          role: inv.role,
+          permissions: inv.permissions,
+          invite_code: inv.invite_code,
+          status: inv.status,
+          created_at: inv.created_at,
+          expires_at: inv.expires_at
+        }, { onConflict: 'invite_code' });
       }
 
       for (const bot of this._coll('bots')) {
@@ -768,7 +1147,7 @@ class Store {
           status: bot.status,
           created_at: bot.created_at,
           updated_at: bot.updated_at
-        });
+        }, { onConflict: 'bot_token' });
       }
 
       for (const customer of this._coll('customers')) {
@@ -804,6 +1183,10 @@ class Store {
 
       for (const msg of this._coll('complaint_messages')) {
         if (!msg.complaint_id) continue;
+        const parentComplaint = this._coll('complaints').find(c => c.id === msg.complaint_id);
+        if (!parentComplaint) continue;
+        const botExists = this._coll('bots').some(b => b.id === parentComplaint.bot_id);
+        if (!botExists) continue;
         await supabase.from('complaint_messages').upsert({
           id: msg.id,
           complaint_id: msg.complaint_id,

@@ -48,6 +48,12 @@ router.post('/webhook/:botId', async (req, res) => {
     return res.status(404).send('Bot not found');
   }
 
+  // Check if bot is paused due to subscription downgrade
+  if (bot.status === 'paused' || bot.status === 'suspended') {
+    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is ${bot.status} due to plan limits. Update ignored.`);
+    return res.status(200).send('Bot paused');
+  }
+
   // Verify secret token
   const secretHeader = (req.get('X-Telegram-Bot-Api-Secret-Token') || '').trim();
   const expectedSecret = (bot.secret_token || SECRET_TOKEN || '').trim();
@@ -91,6 +97,12 @@ router.post('/webhook', async (req, res) => {
     console.warn('⚠️ [Webhook] No registered bot found to handle incoming update.');
     console.warn('   Ensure TELEGRAM_BOT_TOKEN is set in your .env file.');
     return res.sendStatus(200);
+  }
+
+  // Check if bot is paused due to subscription downgrade
+  if (bot.status === 'paused' || bot.status === 'suspended') {
+    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is ${bot.status} due to plan limits. Update ignored.`);
+    return res.status(200).send('Bot paused');
   }
 
   // 2. Secret token check

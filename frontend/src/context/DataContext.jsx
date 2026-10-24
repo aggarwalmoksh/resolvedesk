@@ -271,14 +271,37 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  // Upgrade subscription
+  // Change subscription plan (Upgrade or Downgrade)
   const upgradePlan = async (planId) => {
     try {
-      await api.upgradeSubscription(planId);
+      const res = await api.upgradeSubscription(planId);
       await refreshAll();
-      showToast(`Subscription plan upgraded!`);
+      showToast(res?.message || `Subscription plan updated!`);
+      return res;
     } catch (err) {
-      showToast(err.message || 'Failed to upgrade plan', 'error');
+      showToast(err.message || 'Failed to update plan', 'error');
+      throw err;
+    }
+  };
+
+  const activateBot = async (botId) => {
+    try {
+      const res = await api.activateBot(botId);
+      await refreshAll();
+      showToast(res.message || 'Bot activated successfully!');
+    } catch (err) {
+      showToast(err.message || 'Failed to activate bot', 'error');
+      throw err;
+    }
+  };
+
+  const pauseBot = async (botId) => {
+    try {
+      const res = await api.pauseBot(botId);
+      await refreshAll();
+      showToast(res.message || 'Bot paused');
+    } catch (err) {
+      showToast(err.message || 'Failed to pause bot', 'error');
       throw err;
     }
   };
@@ -303,6 +326,8 @@ export const DataProvider = ({ children }) => {
         updateMemberPermissions,
         inviteMember,
         linkBot,
+        activateBot,
+        pauseBot,
         upgradePlan,
         showToast
       }}

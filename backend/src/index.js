@@ -85,6 +85,12 @@ const server = app.listen(PORT, async () => {
   console.log(`💾 Local Store Loaded From : ${store.isLoaded ? '.data/db.json' : 'in-memory'}`);
   console.log(`=============================================================`);
 
+  try {
+    await store.syncWithSupabase();
+  } catch (err) {
+    console.warn('⚠️ Notice during Supabase sync:', err.message);
+  }
+
   if (BOT_TOKEN) {
     try {
       await store.ensurePrimaryBot(BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL);

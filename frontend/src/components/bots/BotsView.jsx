@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Bot, 
   Plus, 
-  CheckCircle2, 
+  CheckCircle2, AlertCircle, 
   ExternalLink, 
   Copy, 
   Check, 
@@ -136,10 +136,26 @@ export const BotsView = ({ onNavigateTab }) => {
                 </div>
               </div>
 
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Active Webhook</span>
-              </span>
+              {bot.status === 'paused' || bot.status === 'suspended' ? (
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Paused (Plan Limit)</span>
+                  </span>
+                  <button
+                    onClick={() => activateBot && activateBot(bot.id)}
+                    className="px-2.5 py-1 rounded-xl bg-[#2B5484] hover:bg-[#203F64] text-white text-[11px] font-semibold transition-all shadow-xs"
+                    title="Activate this bot within your plan quota"
+                  >
+                    Activate
+                  </button>
+                </div>
+              ) : (
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Active Webhook</span>
+                </span>
+              )}
             </div>
 
             {/* Webhook Endpoint Box */}
@@ -171,9 +187,15 @@ export const BotsView = ({ onNavigateTab }) => {
               <span className="text-[11px]">
                 Linked: {new Date(bot.created_at).toLocaleDateString()}
               </span>
-              <span className="text-emerald-600 font-medium text-[11px]">
-                ⚡ Listening for messages
-              </span>
+              {bot.status === 'paused' || bot.status === 'suspended' ? (
+                <span className="text-amber-600 font-medium text-[11px]">
+                  ⏸️ Ingestion paused
+                </span>
+              ) : (
+                <span className="text-emerald-600 font-medium text-[11px]">
+                  ⚡ Listening for messages
+                </span>
+              )}
             </div>
           </div>
         ))}

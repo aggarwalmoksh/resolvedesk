@@ -3,13 +3,14 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
 import { checkMemberQuota } from '../middleware/quotaMiddleware.js';
 import { store, DEFAULT_PERMISSIONS } from '../db/store.js';
-import { hashPassword, signToken, sanitizeUser } from '../services/authService.js';
+import { hashPassword, signToken, sanitizeUser, formatE164Phone, ensureSupabaseAuthUser } from '../services/authService.js';
+import { supabase } from '../db/supabase.js';
 
 const router = express.Router();
 
 /**
  * GET /api/team/verify-invite/:code (Public)
- * Check if invitation code is valid
+ * Check if invitation code is valid and return details (including email and phone)
  */
 router.get('/verify-invite/:code', (req, res) => {
   try {
@@ -26,7 +27,9 @@ router.get('/verify-invite/:code', (req, res) => {
         phone: invite.phone,
         role: invite.role,
         org_name: org?.name || 'ResolveDesk Workspace',
-        status: invite.status
+        status: invite.status,
+        locked_email: Boolean(invite.email),
+        locked_phone: Boolean(invite.phone)
       }
     });
   } catch (err) {
@@ -38,7 +41,7 @@ router.get('/verify-invite/:code', (req, res) => {
  * POST /api/team/accept-invite (Public)
  * Invited team member signs up with invite code and joins the business organization
  */
-router.post('/accept-invite', (req, res) => {
+router.post('/accept-invite', async (req, res) => {
   try {
     const { invite_code, name, email, phone, password } = req.body;
     if (!invite_code || !name) {
@@ -59,29 +62,56 @@ router.post('/accept-invite', (req, res) => {
       return res.status(404).json({ error: 'Organization no longer exists' });
     }
 
-    const userEmail = (email || invite.email || '').toLowerCase().trim();
-    const userPhone = (phone || invite.phone || '').trim();
+    // Security & Data Integrity: If invite was created for a specific email or phone, prevent tampering
+    if (invite.email && email && email.toLowerCase().trim() !== invite.email.toLowerCase().trim()) {
+      return res.status(400).json({
+        error: `This invitation was issued specifically for ${invite.email}. You cannot register with a different email.`
+      });
+    }
+    if (invite.phone && phone && formatE164Phone(phone.trim()) !== formatE164Phone(invite.phone.trim())) {
+      return res.status(400).json({
+        error: `This invitation was issued specifically for ${invite.phone}. You cannot register with a different phone number.`
+      });
+    }
 
-    // Check if user already exists
+    const userEmail = (invite.email || email || '').toLowerCase().trim();
+    const rawPhone = (invite.phone || phone || '').trim();
+    const cleanPhone = rawPhone ? formatE164Phone(rawPhone) : null;
+
+    if (!userEmail && !cleanPhone) {
+      return res.status(400).json({ error: 'Email address or mobile phone number is required to join the team' });
+    }
+
+    // Check if user already exists in this organization
     if (userEmail && store.getUserByEmail(userEmail, org.id)) {
       return res.status(400).json({ error: 'A team member with this email already exists in this organization' });
     }
-    if (userPhone && store.getUserByPhone(userPhone, org.id)) {
-      return res.status(400).json({ error: 'A team member with this phone already exists in this organization' });
+    if (cleanPhone && store.getUserByPhone(cleanPhone, org.id)) {
+      return res.status(400).json({ error: 'A team member with this phone number already exists in this organization' });
     }
+
+    // Guaranteed Supabase Auth User registration (creates in auth.users)
+    const sbUserId = await ensureSupabaseAuthUser({
+      email: userEmail || undefined,
+      phone: cleanPhone || undefined,
+      password,
+      name: name.trim(),
+      metadata: { org_id: org.id, role: invite.role }
+    });
 
     const passwordHash = password ? hashPassword(password) : null;
     const user = store.createUser({
+      id: sbUserId,
       org_id: org.id,
       name: name.trim(),
       email: userEmail || null,
-      phone: userPhone || `+91${Date.now().toString().slice(-10)}`,
+      phone: cleanPhone || (userEmail ? userEmail.slice(0, 32) : '+910000000000'),
       password_hash: passwordHash,
       role: invite.role,
       permissions: invite.permissions
     });
 
-    // Mark invitation accepted
+    // Mark invitation accepted and sync to Supabase
     store.updateInvitation(invite.id, { status: 'accepted' });
 
     const token = signToken({ userId: user.id, orgId: org.id });
@@ -126,17 +156,17 @@ router.get('/', (req, res) => {
 
 /**
  * POST /api/team/invite
- * Invite a member by email or phone with custom permissions (GitHub style email invite)
+ * Invite a member by email or phone with custom permissions
  */
 router.post('/invite', requirePermission('can_manage_team'), checkMemberQuota, (req, res) => {
   try {
     const { email, phone, role = 'agent', permissions, name } = req.body;
     if (!email && !phone) {
-      return res.status(400).json({ error: 'Email address is required to invite a team member' });
+      return res.status(400).json({ error: 'Email or phone number is required to invite a team member' });
     }
 
     const cleanEmail = email ? email.toLowerCase().trim() : null;
-    const cleanPhone = phone ? phone.trim() : null;
+    const cleanPhone = phone ? formatE164Phone(phone.trim()) : null;
 
     if (cleanEmail) {
       const existingByEmail = store.getUserByEmail(cleanEmail, req.org.id);
@@ -168,11 +198,11 @@ router.post('/invite', requirePermission('can_manage_team'), checkMemberQuota, (
 
     const host = (req.get ? req.get('host') : req.headers?.host) || 'localhost:5173';
     const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
-    const inviteUrl = `${proto}://${host}/?invite=${invite.invite_code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
+    const inviteUrl = `${proto}://${host}/?invite=${invite.invite_code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}${cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : ''}`;
 
     res.status(201).json({
       status: 'success',
-      message: `Team invitation sent to ${cleanEmail || cleanPhone}! Like GitHub, an email notification has been dispatched.`,
+      message: `Team invitation created for ${cleanEmail || cleanPhone}!`,
       data: {
         invitation: invite,
         invite_url: inviteUrl,

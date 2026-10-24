@@ -1,15 +1,15 @@
 {
   "organizations": [
     {
-      "id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "id": "b56c4bdb-c080-41f9-99d8-f98647f3f931",
       "name": "Lila's Blossom Boutique",
       "phone": "+919876543210",
       "subscription_tier": "growth",
       "max_bots": 3,
       "max_members": 10,
       "ticket_seq": 1002,
-      "created_at": "2026-10-24T15:39:29.395Z",
-      "updated_at": "2026-10-24T15:39:29.466Z"
+      "created_at": "2026-10-23T23:21:05.845+00:00",
+      "updated_at": "2026-10-23T23:21:06.02+00:00"
     },
     {
       "id": "73b3d267-2eba-435a-b827-d6f7ac0e7cd5",
@@ -18,15 +18,48 @@
       "subscription_tier": "starter",
       "max_bots": 1,
       "max_members": 3,
-      "ticket_seq": 1001,
-      "created_at": "2026-10-24T15:51:24.303Z",
-      "updated_at": "2026-10-24T15:51:24.303Z"
+      "ticket_seq": 1000,
+      "created_at": "2026-10-24T15:51:24.303+00:00",
+      "updated_at": "2026-10-24T15:51:24.303+00:00"
+    },
+    {
+      "id": "b1ecc65a-4a6c-489c-b917-d338717359d3",
+      "name": "ResolveDesk Primary Support",
+      "phone": "+1000000000",
+      "subscription_tier": "scale",
+      "max_bots": 10,
+      "max_members": 30,
+      "created_at": "2026-10-23T23:47:21.033+00:00",
+      "updated_at": "2026-10-23T23:47:21.034+00:00",
+      "ticket_seq": 1000
+    },
+    {
+      "id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "name": "+918837657794 Workspace",
+      "phone": "+918837657794",
+      "subscription_tier": "growth",
+      "max_bots": 3,
+      "max_members": 10,
+      "ticket_seq": 1004,
+      "created_at": "2026-10-24T17:33:54.198+00:00",
+      "updated_at": "2026-10-24T18:33:45.925+00:00"
+    },
+    {
+      "id": "243fcb18-6372-4e41-addb-199a87793fda",
+      "name": "rishu63318 Workspace",
+      "phone": "+910000000000",
+      "subscription_tier": "starter",
+      "max_bots": 1,
+      "max_members": 3,
+      "ticket_seq": 1000,
+      "created_at": "2026-10-24T19:28:12.741+00:00",
+      "updated_at": "2026-10-24T19:28:12.741+00:00"
     }
   ],
   "users": [
     {
       "id": "aad1a4f6-2421-4c55-bbc4-b5117bf6e17a",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "org_id": "b56c4bdb-c080-41f9-99d8-f98647f3f931",
       "name": "Lila Vance",
       "phone": "+919876543210",
       "password_hash": "f41a11ac9ac327adcc9456e1d0719ee4:37b63005d58c3d6b797d92d20603aa8edbe0035c7a92d602a4f59d11eef09bfa2db5919c6a13d59e7c9b0c8fdf2c0355a5fdf782e6659dfc9124cc5bd987c229",
@@ -44,7 +77,7 @@
     },
     {
       "id": "13045114-577f-49a9-8242-4f4d8d19b06b",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "org_id": "b56c4bdb-c080-41f9-99d8-f98647f3f931",
       "name": "Maya Patel",
       "phone": "9876543211",
       "password_hash": "d858fe8e3ba51993a1d372e7e362c11b:54a295013bb0d72c2a4d7ea86002bd611602f0df970a421b96a7cf63b28c457f9d2d624b04c6ae458acdfe6e4f3e7d7a72165c21a55f8855f31c0515856fd04e",
@@ -78,131 +111,256 @@
       "is_active": true,
       "created_at": "2026-10-24T15:51:24.421Z",
       "updated_at": "2026-10-24T15:51:24.421Z"
+    },
+    {
+      "id": "b5f28cf3-3d9f-415c-a103-e266c0f0c53c",
+      "org_id": "73b3d267-2eba-435a-b827-d6f7ac0e7cd5",
+      "name": "Rishu",
+      "phone": "+912858212290",
+      "password_hash": "d72083185af0c670bef1398ff13b4c28:dda3d8e3910207521fa3f383e50a33b88dfb2405fc32873bc86be157cbfb591063c4c77c56bb60f0f1a96dc97d1ef480a9e43e24e4afd5251f3fd744cd7fd6c7",
+      "role": "agent",
+      "permissions": {
+        "can_reply": false,
+        "can_update_status": true,
+        "can_assign": false,
+        "can_manage_team": false,
+        "can_manage_bots": false,
+        "can_view_analytics": true
+      },
+      "is_active": true,
+      "created_at": "2026-10-24T16:10:12.291Z",
+      "updated_at": "2026-10-24T16:10:12.291Z"
+    },
+    {
+      "id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "name": "Business Owner",
+      "email": null,
+      "phone": "+918837657794",
+      "password_hash": null,
+      "role": "owner",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": true,
+        "can_assign": true,
+        "can_manage_team": true,
+        "can_manage_bots": true
+      },
+      "is_active": true,
+      "created_at": "2026-10-24T17:24:17.191Z",
+      "updated_at": "2026-10-24T17:24:17.191Z"
+    },
+    {
+      "id": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "name": "Moksh",
+      "email": "mokshaggarwal767@gmail.com",
+      "phone": "+917876601508",
+      "password_hash": "97ff79dfb90edb646feaddc367eb519f:0319f230b987dcfb8603e51bd05c0959a05cc49fa50a4a4489889947fb15247054a073a0367324832ee8b461122842e2f375890c17bc02fbb53cd2dcf6ef47fe",
+      "role": "agent",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": false,
+        "can_assign": false,
+        "can_manage_team": false,
+        "can_manage_bots": false,
+        "can_view_analytics": false
+      },
+      "is_active": true,
+      "created_at": "2026-10-24T17:40:50.923Z",
+      "updated_at": "2026-10-24T17:59:33.105Z"
+    },
+    {
+      "id": "0ccdd6ff-1ef9-4621-8ec8-01e238798f5f",
+      "org_id": "243fcb18-6372-4e41-addb-199a87793fda",
+      "name": "rishu63318",
+      "email": "rishu63318@gmail.com",
+      "phone": null,
+      "password_hash": null,
+      "role": "owner",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": true,
+        "can_assign": true,
+        "can_manage_team": true,
+        "can_manage_bots": true
+      },
+      "is_active": true,
+      "created_at": "2026-10-24T19:28:12.746Z",
+      "updated_at": "2026-10-24T19:28:12.746Z"
+    },
+    {
+      "id": "f3227bc0-9211-4ca0-a39a-63653eed25d0",
+      "org_id": "243fcb18-6372-4e41-addb-199a87793fda",
+      "name": "asdf",
+      "email": "moksh3239.beai24@chitkara.edu.in",
+      "phone": "+917876601508",
+      "password_hash": "c3344951051ee0e790fe0af685867085:5c5c863ea716573cce11e08742b9b2f50a9bb9787fe81377051e302e73d57c19d2d324ae9ddab8fdc2a27148649144b35b3da84d1ab80eee96a87f98498856a4",
+      "role": "agent",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": true,
+        "can_assign": false,
+        "can_manage_team": false,
+        "can_manage_bots": false,
+        "can_view_analytics": true
+      },
+      "is_active": true,
+      "created_at": "2026-10-24T19:29:53.903Z",
+      "updated_at": "2026-10-24T19:29:53.903Z"
     }
   ],
   "bots": [
     {
-      "id": "87a4ba8a-c990-483c-9445-e425413e448e",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
-      "bot_token": "test_token_flower_bot_1",
-      "bot_username": "test_demo_bot",
-      "bot_title": "Flower Shop Complaint Bot",
-      "secret_token": "f1887e9a718766727d78048ca7c175f184784d095f705692",
-      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/87a4ba8a-c990-483c-9445-e425413e448e",
-      "status": "active",
-      "created_at": "2026-10-24T15:39:29.464Z",
-      "updated_at": "2026-10-24T15:39:29.464Z"
-    },
-    {
-      "id": "532de5c2-4878-43bb-8418-5ce7c704eb13",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
-      "bot_token": "test_token_flower_bot_2",
-      "bot_username": "test_demo_bot",
-      "bot_title": "Delivery Support Bot",
-      "secret_token": "4727d572e07d8f7ccefe8e37aa65bec66fbb5a8f5033a53f",
-      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/532de5c2-4878-43bb-8418-5ce7c704eb13",
-      "status": "active",
-      "created_at": "2026-10-24T15:39:29.477Z",
-      "updated_at": "2026-10-24T15:39:29.477Z"
-    },
-    {
-      "id": "2178fc82-cf14-45c6-80de-896b3fac1552",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "id": "5365ef05-1b2c-4c90-ae74-e03bf8ce4388",
+      "org_id": "b1ecc65a-4a6c-489c-b917-d338717359d3",
       "bot_token": "8866904329:AAFJpSnWEDYZmvYcnO5HnaxflbkzhjMYGlY",
       "bot_username": "TestBusiness001bot",
       "bot_title": "TestBusiness001",
       "secret_token": "xjDAujvmJqNBEBXafLFcWOVBT4pXkClykhW3IOjKqvM",
       "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook",
       "status": "active",
-      "created_at": "2026-10-24T15:42:50.483Z",
-      "updated_at": "2026-10-24T15:42:50.485Z"
+      "created_at": "2026-10-23T23:47:21.952+00:00",
+      "updated_at": "2026-10-23T23:47:21.952+00:00"
     },
     {
-      "id": "6d9a3285-f075-49cd-8978-02d716d6075d",
-      "org_id": "73b3d267-2eba-435a-b827-d6f7ac0e7cd5",
+      "id": "123b9ffd-6633-46a7-9903-0314bda522c4",
+      "org_id": "fce593ea-743c-4dbf-8903-43e4e4d9a349",
       "bot_token": "8867854048:AAHVIKhkXGbRvAFsEtiQ6h_Luf02UlDAlv4",
       "bot_username": "TestBusiness002bot",
-      "bot_title": "test2",
-      "secret_token": "9430a3fc3da171ab3ac7372dff0ad6f1b0691044aa7349f6",
-      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/6d9a3285-f075-49cd-8978-02d716d6075d",
+      "bot_title": "testt",
+      "secret_token": "ca3b8119b2f3b830299f355640e5a758e0a6a36d5a79ae50",
+      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/123b9ffd-6633-46a7-9903-0314bda522c4",
       "status": "active",
-      "created_at": "2026-10-24T15:52:53.022Z",
-      "updated_at": "2026-10-24T15:52:53.022Z"
+      "created_at": "2026-10-23T23:54:43.73+00:00",
+      "updated_at": "2026-10-23T23:54:43.73+00:00"
+    },
+    {
+      "id": "4f55a976-aa55-4dfa-bfb5-9158bdd7af50",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_token": "8378099401:AAHki8z1Ptfp8moij9cxO2GMDF3gcr_pbB8",
+      "bot_username": "Testrab3bot",
+      "bot_title": "test003bot",
+      "secret_token": "9ac31a8ab680f99cb69e2e08dec467b7f0afb0ea0e1c562f",
+      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/4f55a976-aa55-4dfa-bfb5-9158bdd7af50",
+      "status": "active",
+      "created_at": "2026-10-24T17:46:20.31+00:00",
+      "updated_at": "2026-10-24T17:46:20.31+00:00"
+    },
+    {
+      "id": "4e551427-1d3e-4b17-a6fd-6652b20e2e9d",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_token": "8254691261:AAHtvP1CVLem8x9HmOddLVz03KKoKulJu_Q",
+      "bot_username": "TestingNewBot000Bot",
+      "bot_title": "TestBot123",
+      "secret_token": "112c801535f8c8f575f4eb4d17d173686c1f86ab91cd2e40",
+      "webhook_url": "https://stoop-banister-faceless.ngrok-free.dev/telegram/webhook/4e551427-1d3e-4b17-a6fd-6652b20e2e9d",
+      "status": "active",
+      "created_at": "2026-10-24T18:20:37.091+00:00",
+      "updated_at": "2026-10-24T18:33:45.234+00:00"
     }
   ],
   "customers": [
     {
-      "id": "3d324423-af69-4ee1-8962-648d0b6f068a",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
-      "telegram_user_id": 88776655,
-      "username": "david_m",
-      "first_name": "David",
-      "last_name": "Miller",
-      "phone": null,
-      "created_at": "2026-10-24T15:39:29.529Z",
-      "updated_at": "2026-10-24T15:39:29.529Z"
-    },
-    {
-      "id": "390c0cb9-8b59-4dc1-932d-29a87e051307",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
       "telegram_user_id": 1301821516,
       "username": "mokshaggarwal",
       "first_name": "Moksh",
       "last_name": "Aggarwal",
       "phone": null,
-      "created_at": "2026-10-24T15:45:19.751Z",
-      "updated_at": "2026-10-24T15:45:19.751Z"
+      "created_at": "2026-10-24T17:55:43.706+00:00",
+      "updated_at": "2026-10-24T18:36:01.696+00:00"
     },
     {
-      "id": "a20d005b-d50d-4954-83bf-9c71378000aa",
-      "org_id": "73b3d267-2eba-435a-b827-d6f7ac0e7cd5",
+      "id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
       "telegram_user_id": 6997088749,
       "username": null,
       "first_name": "Rishu_2410993384",
       "last_name": null,
       "phone": null,
-      "created_at": "2026-10-24T15:53:27.328Z",
-      "updated_at": "2026-10-24T15:53:27.328Z"
+      "created_at": "2026-10-24T18:21:00.529+00:00",
+      "updated_at": "2026-10-24T18:21:08.137+00:00"
+    },
+    {
+      "id": "f0834f70-43e0-4a87-85d3-11bdedcb44e0",
+      "org_id": "d74ce948-bc47-45d1-9b99-56b8c4888c13",
+      "telegram_user_id": 11223344,
+      "username": "test_user_telegram",
+      "first_name": "TestCustomer",
+      "last_name": null,
+      "phone": null,
+      "created_at": "2026-10-23T21:45:10.956+00:00",
+      "updated_at": "2026-10-23T21:45:10.957+00:00"
+    },
+    {
+      "id": "930b8173-0a6a-4985-94ac-739d494636f3",
+      "org_id": "d74ce948-bc47-45d1-9b99-56b8c4888c13",
+      "telegram_user_id": 55667788,
+      "username": "aiden_buyer",
+      "first_name": "Aiden",
+      "last_name": null,
+      "phone": null,
+      "created_at": "2026-10-23T21:46:41.357+00:00",
+      "updated_at": "2026-10-23T21:46:41.359+00:00"
+    },
+    {
+      "id": "73fcd0c1-0b1c-4a6d-b38f-3f926bbe6ad0",
+      "org_id": "b1ecc65a-4a6c-489c-b917-d338717359d3",
+      "telegram_user_id": 77889900,
+      "username": "test_cust_2",
+      "first_name": "TestCustomer2",
+      "last_name": null,
+      "phone": null,
+      "created_at": "2026-10-24T16:31:20.44+00:00",
+      "updated_at": "2026-10-24T16:31:25.055+00:00"
+    },
+    {
+      "id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "telegram_user_id": 1301821516,
+      "username": "mokshaggarwal",
+      "first_name": "Moksh",
+      "last_name": "Aggarwal",
+      "phone": null,
+      "created_at": "2026-10-24T17:55:43.706Z",
+      "updated_at": "2026-10-24T17:55:54.203Z"
+    },
+    {
+      "id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "telegram_user_id": 6997088749,
+      "username": null,
+      "first_name": "Rishu_2410993384",
+      "last_name": null,
+      "phone": null,
+      "created_at": "2026-10-24T18:21:00.529Z",
+      "updated_at": "2026-10-24T18:21:08.137Z"
     }
   ],
   "complaints": [
     {
-      "id": "218ec85d-2b92-483f-a727-d6f5b5b32238",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
-      "bot_id": "87a4ba8a-c990-483c-9445-e425413e448e",
-      "customer_id": "3d324423-af69-4ee1-8962-648d0b6f068a",
-      "ticket_number": "#TICK-1001",
-      "title": "My anniversary flower bouquet was delivered dam...",
-      "description": "My anniversary flower bouquet was delivered damaged and wilting! Please help.",
-      "category": "product",
-      "priority": "medium",
-      "status": "closed",
-      "assigned_to": "13045114-577f-49a9-8242-4f4d8d19b06b",
-      "closed_at": "2026-10-24T15:39:29.595Z",
-      "created_at": "2026-10-24T15:39:29.545Z",
-      "updated_at": "2026-10-24T15:39:29.595Z"
-    },
-    {
       "id": "e74a6ccb-8a58-4119-9b37-73df36f80e78",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
-      "bot_id": "2178fc82-cf14-45c6-80de-896b3fac1552",
-      "customer_id": "390c0cb9-8b59-4dc1-932d-29a87e051307",
+      "org_id": "b1ecc65a-4a6c-489c-b917-d338717359d3",
+      "bot_id": "5365ef05-1b2c-4c90-ae74-e03bf8ce4388",
+      "customer_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
       "ticket_number": "#TICK-1002",
       "title": "Yo",
       "description": "Yo",
       "category": "other",
       "priority": "medium",
       "status": "in_progress",
-      "assigned_to": null,
+      "assigned_to": "",
       "closed_at": null,
       "created_at": "2026-10-24T15:45:20.116Z",
-      "updated_at": "2026-10-24T15:45:33.843Z"
+      "updated_at": "2026-10-24T18:06:17.723Z"
     },
     {
       "id": "7e4e5b3d-b6e4-4544-ae07-266ac1c24c3d",
       "org_id": "73b3d267-2eba-435a-b827-d6f7ac0e7cd5",
-      "bot_id": "6d9a3285-f075-49cd-8978-02d716d6075d",
-      "customer_id": "a20d005b-d50d-4954-83bf-9c71378000aa",
+      "bot_id": "123b9ffd-6633-46a7-9903-0314bda522c4",
+      "customer_id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
       "ticket_number": "#TICK-1001",
       "title": "Order not received",
       "description": "Order not received",
@@ -212,50 +370,90 @@
       "assigned_to": "55c679fb-f3a9-446b-8e2f-fcc0fb6bc5fe",
       "closed_at": null,
       "created_at": "2026-10-24T15:53:28.568Z",
-      "updated_at": "2026-10-24T15:54:42.513Z"
+      "updated_at": "2026-10-24T16:12:31.929Z"
+    },
+    {
+      "id": "44a46b4d-955d-4fbf-bd2b-ef2bbbe9202f",
+      "org_id": "b1ecc65a-4a6c-489c-b917-d338717359d3",
+      "bot_id": "5365ef05-1b2c-4c90-ae74-e03bf8ce4388",
+      "customer_id": "73fcd0c1-0b1c-4a6d-b38f-3f926bbe6ad0",
+      "ticket_number": "#TICK-1001",
+      "title": "Hello, my delivery has not arrived yet, ticket ...",
+      "description": "Hello, my delivery has not arrived yet, ticket please.\n---\n[Update]: Any updates? I am still waiting for the courier.",
+      "category": "delivery",
+      "priority": "medium",
+      "status": "pending",
+      "assigned_to": null,
+      "closed_at": null,
+      "created_at": "2026-10-24T16:31:20.991Z",
+      "updated_at": "2026-10-24T16:31:26.206Z"
+    },
+    {
+      "id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_id": "4f55a976-aa55-4dfa-bfb5-9158bdd7af50",
+      "customer_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "ticket_number": "#TICK-1001",
+      "title": "/start",
+      "description": "/start\n---\n[Update]: New testt",
+      "category": "other",
+      "priority": "medium",
+      "status": "closed",
+      "assigned_to": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "closed_at": "2026-10-24T17:58:42.430Z",
+      "created_at": "2026-10-24T17:55:45.190Z",
+      "updated_at": "2026-10-24T17:58:43.685Z"
+    },
+    {
+      "id": "c81bedb5-c7d9-43d0-9ea3-b2d35a5221c6",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_id": "4f55a976-aa55-4dfa-bfb5-9158bdd7af50",
+      "customer_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "ticket_number": "#TICK-1002",
+      "title": "Hello 👋",
+      "description": "Hello 👋",
+      "category": "other",
+      "priority": "medium",
+      "status": "closed",
+      "assigned_to": null,
+      "closed_at": "2026-10-24T18:16:52.591Z",
+      "created_at": "2026-10-24T18:12:12.466Z",
+      "updated_at": "2026-10-24T18:16:52.591Z"
+    },
+    {
+      "id": "fbb51efb-b41d-4d88-b244-4a80b70a033e",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_id": "4e551427-1d3e-4b17-a6fd-6652b20e2e9d",
+      "customer_id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
+      "ticket_number": "#TICK-1003",
+      "title": "/start",
+      "description": "/start\n---\n[Update]: Hloo",
+      "category": "other",
+      "priority": "medium",
+      "status": "pending",
+      "assigned_to": null,
+      "closed_at": null,
+      "created_at": "2026-10-24T18:21:01.282Z",
+      "updated_at": "2026-10-24T18:21:08.409Z"
+    },
+    {
+      "id": "ad14f6f3-563f-497d-9065-bdb3647d9055",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "bot_id": "4f55a976-aa55-4dfa-bfb5-9158bdd7af50",
+      "customer_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "ticket_number": "#TICK-1004",
+      "title": "Refund request",
+      "description": "Refund request\n---\n[Update]: Agent assistance\n---\n[Update]: /start\n---\n[Update]: Policy question",
+      "category": "billing",
+      "priority": "medium",
+      "status": "pending",
+      "assigned_to": null,
+      "closed_at": null,
+      "created_at": "2026-10-24T18:34:34.573Z",
+      "updated_at": "2026-10-24T18:36:02.217Z"
     }
   ],
   "complaint_messages": [
-    {
-      "id": "d8c3b795-cf27-4837-8f44-d2da22fb6289",
-      "complaint_id": "218ec85d-2b92-483f-a727-d6f5b5b32238",
-      "sender_type": "customer",
-      "sender_id": "3d324423-af69-4ee1-8962-648d0b6f068a",
-      "sender_name": "David Miller",
-      "message_text": "My anniversary flower bouquet was delivered damaged and wilting! Please help.",
-      "telegram_message_id": 501,
-      "created_at": "2026-10-24T15:39:29.556Z"
-    },
-    {
-      "id": "ffa59038-0294-46a6-9a93-1c69650ba66a",
-      "complaint_id": "218ec85d-2b92-483f-a727-d6f5b5b32238",
-      "sender_type": "system",
-      "sender_id": "aad1a4f6-2421-4c55-bbc4-b5117bf6e17a",
-      "sender_name": "System",
-      "message_text": "Ticket assigned to Maya Patel by Lila Vance.",
-      "telegram_message_id": null,
-      "created_at": "2026-10-24T15:39:29.575Z"
-    },
-    {
-      "id": "4b14ddf3-e007-4f11-b7d2-eb1621a7bb29",
-      "complaint_id": "218ec85d-2b92-483f-a727-d6f5b5b32238",
-      "sender_type": "agent",
-      "sender_id": "13045114-577f-49a9-8242-4f4d8d19b06b",
-      "sender_name": "Maya Patel",
-      "message_text": "Hello David, we sincerely apologize for the condition of your bouquet. We have dispatched a fresh luxury bouquet for immediate delivery today.",
-      "telegram_message_id": null,
-      "created_at": "2026-10-24T15:39:29.577Z"
-    },
-    {
-      "id": "9a4b9d91-9acf-4ec3-9ac5-c6c1baff34af",
-      "complaint_id": "218ec85d-2b92-483f-a727-d6f5b5b32238",
-      "sender_type": "system",
-      "sender_id": "13045114-577f-49a9-8242-4f4d8d19b06b",
-      "sender_name": "System",
-      "message_text": "Status changed to 'closed' by Maya Patel.",
-      "telegram_message_id": null,
-      "created_at": "2026-10-24T15:39:29.600Z"
-    },
     {
       "id": "ca8dbe7f-1551-42c4-9478-880856841e1b",
       "complaint_id": "e74a6ccb-8a58-4119-9b37-73df36f80e78",
@@ -305,12 +503,272 @@
       "message_text": "Ticket assigned to Palak by Palak.",
       "telegram_message_id": null,
       "created_at": "2026-10-24T15:54:43.467Z"
+    },
+    {
+      "id": "fdd64489-7e34-4878-ac07-09ba91374d6f",
+      "complaint_id": "7e4e5b3d-b6e4-4544-ae07-266ac1c24c3d",
+      "sender_type": "system",
+      "sender_id": "b5f28cf3-3d9f-415c-a103-e266c0f0c53c",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Rishu.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T16:12:25.395Z"
+    },
+    {
+      "id": "dd146a1c-49b3-42c1-a14b-570685e147d6",
+      "complaint_id": "7e4e5b3d-b6e4-4544-ae07-266ac1c24c3d",
+      "sender_type": "system",
+      "sender_id": "b5f28cf3-3d9f-415c-a103-e266c0f0c53c",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Rishu.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T16:12:25.411Z"
+    },
+    {
+      "id": "0b52a50e-4b2c-4605-8cef-7eadd6a30bb7",
+      "complaint_id": "7e4e5b3d-b6e4-4544-ae07-266ac1c24c3d",
+      "sender_type": "system",
+      "sender_id": "b5f28cf3-3d9f-415c-a103-e266c0f0c53c",
+      "sender_name": "System",
+      "message_text": "Status changed to 'in_progress' by Rishu.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T16:12:32.480Z"
+    },
+    {
+      "id": "af1be2d9-bef0-4294-b6b7-9e551a511275",
+      "complaint_id": "7e4e5b3d-b6e4-4544-ae07-266ac1c24c3d",
+      "sender_type": "system",
+      "sender_id": "b5f28cf3-3d9f-415c-a103-e266c0f0c53c",
+      "sender_name": "System",
+      "message_text": "Status changed to 'in_progress' by Rishu.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T16:12:33.804Z"
+    },
+    {
+      "id": "3a5a3c3e-123e-4ae9-bbdd-76651f2a1f70",
+      "complaint_id": "44a46b4d-955d-4fbf-bd2b-ef2bbbe9202f",
+      "sender_type": "customer",
+      "sender_id": "73fcd0c1-0b1c-4a6d-b38f-3f926bbe6ad0",
+      "sender_name": "TestCustomer2",
+      "message_text": "Hello, my delivery has not arrived yet, ticket please.",
+      "telegram_message_id": 5501,
+      "created_at": "2026-10-24T16:31:22.230Z"
+    },
+    {
+      "id": "0e71f9b6-e518-427a-912e-03fb06dd98d7",
+      "complaint_id": "44a46b4d-955d-4fbf-bd2b-ef2bbbe9202f",
+      "sender_type": "customer",
+      "sender_id": "73fcd0c1-0b1c-4a6d-b38f-3f926bbe6ad0",
+      "sender_name": "TestCustomer2",
+      "message_text": "Any updates? I am still waiting for the courier.",
+      "telegram_message_id": 5502,
+      "created_at": "2026-10-24T16:31:26.962Z"
+    },
+    {
+      "id": "fd5eede3-512c-4454-990f-35a8ca65cae4",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "/start",
+      "telegram_message_id": 1,
+      "created_at": "2026-10-24T17:55:47.967Z"
+    },
+    {
+      "id": "cc92b969-2147-423b-8aee-0aa32c576178",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "New testt",
+      "telegram_message_id": 2,
+      "created_at": "2026-10-24T17:55:56.657Z"
+    },
+    {
+      "id": "d4bcc78c-58f2-43bb-ad27-d1cd0a107de1",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "agent",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "Business Owner",
+      "message_text": "okk",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:57:17.111Z"
+    },
+    {
+      "id": "e790be9e-bb86-45c3-b736-555ba643d1d6",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Ticket assigned to Moksh by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:57:47.088Z"
+    },
+    {
+      "id": "c7e10231-b434-468e-b185-d042b4520d5c",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:57:53.627Z"
+    },
+    {
+      "id": "ac7f2d48-d037-436d-a4af-8b39ec1925a5",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Status changed to 'in_progress' by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:57:57.218Z"
+    },
+    {
+      "id": "2e66e5e5-01cd-45be-b68f-7e5cb355eb00",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Moksh.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:58:43.890Z"
+    },
+    {
+      "id": "4908d1b9-1d54-4f08-8451-2e9bd8f5b235",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Moksh.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:58:44.219Z"
+    },
+    {
+      "id": "0bad367f-6342-4e94-b015-4fa7b8f89786",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "system",
+      "sender_id": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Moksh.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T17:58:44.377Z"
+    },
+    {
+      "id": "9efd1030-24f6-4443-9491-d41ef7dc2a6b",
+      "complaint_id": "4aaf75ce-9fd6-483d-a7b7-52f3534a4351",
+      "sender_type": "agent",
+      "sender_id": "08112f22-8d23-440a-be7c-14b35ece4110",
+      "sender_name": "Moksh",
+      "message_text": "Hello! We are looking into this right now and will assist you shortly.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T18:00:05.623Z"
+    },
+    {
+      "id": "275e5931-2951-4d12-9c54-3895e2c2426f",
+      "complaint_id": "c81bedb5-c7d9-43d0-9ea3-b2d35a5221c6",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "Hello 👋",
+      "telegram_message_id": 6,
+      "created_at": "2026-10-24T18:12:13.868Z"
+    },
+    {
+      "id": "2652aa37-2a6d-4ba4-988c-d1d6190fec9d",
+      "complaint_id": "c81bedb5-c7d9-43d0-9ea3-b2d35a5221c6",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Ticket assigned to Business Owner by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T18:16:48.556Z"
+    },
+    {
+      "id": "43eaaba7-1aa9-4912-8cc3-79db41eaf915",
+      "complaint_id": "c81bedb5-c7d9-43d0-9ea3-b2d35a5221c6",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Ticket assigned to Unassigned by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T18:16:50.710Z"
+    },
+    {
+      "id": "cc445b40-5863-409c-b01e-de30b6cd3d37",
+      "complaint_id": "c81bedb5-c7d9-43d0-9ea3-b2d35a5221c6",
+      "sender_type": "system",
+      "sender_id": "2e07b78a-f770-4832-9a15-7c71594bc733",
+      "sender_name": "System",
+      "message_text": "Status changed to 'closed' by Business Owner.",
+      "telegram_message_id": null,
+      "created_at": "2026-10-24T18:16:52.861Z"
+    },
+    {
+      "id": "3b2b0750-4af7-470b-999c-0e0549422395",
+      "complaint_id": "fbb51efb-b41d-4d88-b244-4a80b70a033e",
+      "sender_type": "customer",
+      "sender_id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
+      "sender_name": "Rishu_2410993384",
+      "message_text": "/start",
+      "telegram_message_id": 1,
+      "created_at": "2026-10-24T18:21:03.181Z"
+    },
+    {
+      "id": "e454d891-b894-4bea-88e4-5bb96be73ca2",
+      "complaint_id": "fbb51efb-b41d-4d88-b244-4a80b70a033e",
+      "sender_type": "customer",
+      "sender_id": "94664afa-d913-4b59-aa9b-3701a571ddf6",
+      "sender_name": "Rishu_2410993384",
+      "message_text": "Hloo",
+      "telegram_message_id": 3,
+      "created_at": "2026-10-24T18:21:08.777Z"
+    },
+    {
+      "id": "6a87c21e-dcf8-461e-a114-f65fc4c5d16c",
+      "complaint_id": "ad14f6f3-563f-497d-9065-bdb3647d9055",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "Refund request",
+      "telegram_message_id": 8,
+      "created_at": "2026-10-24T18:34:36.684Z"
+    },
+    {
+      "id": "163bb40c-ac62-4dfd-a59b-a37ab8c9b5bf",
+      "complaint_id": "ad14f6f3-563f-497d-9065-bdb3647d9055",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "Agent assistance",
+      "telegram_message_id": 10,
+      "created_at": "2026-10-24T18:34:51.014Z"
+    },
+    {
+      "id": "234a3731-2348-43a9-8891-c4798af79c92",
+      "complaint_id": "ad14f6f3-563f-497d-9065-bdb3647d9055",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "/start",
+      "telegram_message_id": 4,
+      "created_at": "2026-10-24T18:35:30.061Z"
+    },
+    {
+      "id": "33be4eca-23c8-45ba-b012-a54f25d0d542",
+      "complaint_id": "ad14f6f3-563f-497d-9065-bdb3647d9055",
+      "sender_type": "customer",
+      "sender_id": "b968789c-aa17-45bd-98b0-21cee9bd1b0c",
+      "sender_name": "Moksh Aggarwal",
+      "message_text": "Policy question",
+      "telegram_message_id": 5,
+      "created_at": "2026-10-24T18:36:02.695Z"
     }
   ],
   "invitations": [
     {
       "id": "a8f84484-e409-4adc-b736-ad1c0a57fc63",
-      "org_id": "908be53c-2c46-4fc7-a40c-269f3272134c",
+      "org_id": "b56c4bdb-c080-41f9-99d8-f98647f3f931",
       "email": null,
       "phone": "9876543211",
       "role": "agent",
@@ -341,9 +799,47 @@
         "can_view_analytics": true
       },
       "invite_code": "INV-5B1A9CEE",
-      "status": "pending",
+      "status": "accepted",
       "created_at": "2026-10-24T15:56:07.789Z",
       "expires_at": "2026-10-31T15:56:07.789Z"
+    },
+    {
+      "id": "418bc602-53c3-493a-a048-1dad86b1b873",
+      "org_id": "a8a8ab80-473b-448f-b813-43fedf55794c",
+      "email": "mokshaggarwal767@gmail.com",
+      "phone": "+917876601508",
+      "role": "agent",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": true,
+        "can_assign": true,
+        "can_manage_team": false,
+        "can_manage_bots": true,
+        "can_view_analytics": true
+      },
+      "invite_code": "INV-505B4B78",
+      "status": "accepted",
+      "created_at": "2026-10-24T17:39:48.965Z",
+      "expires_at": "2026-10-31T17:39:48.965Z"
+    },
+    {
+      "id": "bd866cb8-5366-4e90-ac19-1278cbfcf42f",
+      "org_id": "243fcb18-6372-4e41-addb-199a87793fda",
+      "email": "moksh3239.beai24@chitkara.edu.in",
+      "phone": "+917876601508",
+      "role": "agent",
+      "permissions": {
+        "can_reply": true,
+        "can_update_status": true,
+        "can_assign": false,
+        "can_manage_team": false,
+        "can_manage_bots": false,
+        "can_view_analytics": true
+      },
+      "invite_code": "INV-4CC06A2B",
+      "status": "accepted",
+      "created_at": "2026-10-24T19:29:16.905Z",
+      "expires_at": "2026-10-31T19:29:16.906Z"
     }
   ]
 }

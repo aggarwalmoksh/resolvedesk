@@ -24,14 +24,15 @@ const getHeaders = () => {
 // API Helpers
 export const api = {
   // Auth
-  async login(phone, password) {
-    // 1. First try Supabase Native Auth if credentials look like email or phone
+  async login(phoneOrEmail, password) {
+    const rawId = (phoneOrEmail || '').trim();
+    const isEmail = rawId.includes('@');
+
+    // 1. Try Supabase Native Auth
     try {
-      let emailOrPhone = phone.trim();
-      const isEmail = emailOrPhone.includes('@');
       const authPayload = isEmail 
-        ? { email: emailOrPhone, password } 
-        : { phone: emailOrPhone.startsWith('+') ? emailOrPhone : `+91${emailOrPhone.replace(/\D/g, '')}`, password };
+        ? { email: rawId, password } 
+        : { phone: rawId.startsWith('+') ? rawId : `+91${rawId.replace(/\D/g, '')}`, password };
       
       const { data: sbData, error: sbErr } = await supabase.auth.signInWithPassword(authPayload);
       if (!sbErr && sbData?.session) {
@@ -45,12 +46,12 @@ export const api = {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password })
+      body: JSON.stringify({ identifier: rawId, phone: rawId, email: rawId, password })
     });
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || 'Invalid phone number or password');
+      throw new Error(data.error || 'Invalid credentials');
     }
 
     setAuthToken(data.data.token);
@@ -95,21 +96,11 @@ export const api = {
     return data.data;
   },
 
-  // Supabase Phone OTP Auth
+  // Phone OTP Auth
   async sendPhoneOtp(phone) {
     const formattedPhone = phone.trim().startsWith('+') ? phone.trim() : `+91${phone.replace(/\D/g, '')}`;
     
-    // Call Supabase native client directly
-    try {
-      const { data, error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone
-      });
-      if (!error) {
-        return { status: 'success', message: `OTP sent to ${formattedPhone}`, data };
-      }
-    } catch (err) {}
-
-    // Backend endpoint fallback
+    // Backend API handles code dispatch + native fallback seamlessly
     const res = await fetch(`${API_BASE}/auth/otp/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,23 +114,10 @@ export const api = {
   async verifyPhoneOtp(phone, token) {
     const formattedPhone = phone.trim().startsWith('+') ? phone.trim() : `+91${phone.replace(/\D/g, '')}`;
 
-    // 1. Try verify with Supabase client
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
-        token: token.trim(),
-        type: 'sms'
-      });
-      if (!error && data?.session) {
-        console.log('⚡ Supabase OTP verification succeeded');
-      }
-    } catch (err) {}
-
-    // 2. Verify with backend endpoint to establish org session
     const res = await fetch(`${API_BASE}/auth/otp/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: formattedPhone, token: token.trim() })
+      body: JSON.stringify({ phone: formattedPhone, token: String(token).trim() })
     });
 
     const data = await res.json();
@@ -149,6 +127,55 @@ export const api = {
       setAuthToken(data.data.token);
     }
     return data.data;
+  },
+
+  // Email OTP Auth (Supabase Free — sends OTP to email)
+  async sendEmailOtp(email) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    const res = await fetch(`${API_BASE}/auth/otp/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanEmail })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send email OTP');
+    return data;
+  },
+
+  async verifyEmailOtp(email, token) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    const res = await fetch(`${API_BASE}/auth/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanEmail, token: String(token).trim() })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Invalid OTP code');
+
+    if (data.data?.token) {
+      setAuthToken(data.data.token);
+    }
+    return data.data;
+  },
+
+  // Smart OTP: auto-detects email vs phone
+  async sendOtp(identifier) {
+    const raw = (identifier || '').trim();
+    if (raw.includes('@')) {
+      return this.sendEmailOtp(raw);
+    }
+    return this.sendPhoneOtp(raw);
+  },
+
+  async verifyOtp(identifier, token) {
+    const raw = (identifier || '').trim();
+    if (raw.includes('@')) {
+      return this.verifyEmailOtp(raw, token);
+    }
+    return this.verifyPhoneOtp(raw, token);
   },
 
   async getMe() {
@@ -202,6 +229,26 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to link bot');
+    return data.data;
+  },
+
+  async activateBot(botId) {
+    const res = await fetch(`${API_BASE}/bots/${botId}/activate`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to activate bot');
+    return data.data;
+  },
+
+  async pauseBot(botId) {
+    const res = await fetch(`${API_BASE}/bots/${botId}/pause`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to pause bot');
     return data.data;
   },
 
@@ -298,7 +345,7 @@ export const api = {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to send email invite');
+    if (!res.ok) throw new Error(data.error || 'Failed to send invite');
     return data;
   },
 
