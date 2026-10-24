@@ -3,6 +3,8 @@
   "version": "2.0.0",
   "scripts": {
     "dev": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
     "start": "npm --prefix backend start",
     "test": "npm --prefix backend test",
     "set-webhook": "npm --prefix backend run set-webhook",

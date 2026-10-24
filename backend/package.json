@@ -26,6 +26,7 @@
     "@supabase/supabase-js": "^2.109.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "resolvedesk": "file:..",
     "ws": "^8.22.0"
   }
 }

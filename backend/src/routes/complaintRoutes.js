@@ -30,6 +30,7 @@ router.get('/', (req, res) => {
     const customer = store.getCustomerById(c.customer_id);
     const assignee = c.assigned_to ? store.getUserById(c.assigned_to) : null;
     const bot = store.getBotById(c.bot_id);
+    const messages = store.getMessagesByComplaint(c.id);
 
     return {
       ...c,
@@ -48,7 +49,8 @@ router.get('/', (req, res) => {
         id: bot.id,
         username: bot.bot_username,
         title: bot.bot_title
-      } : null
+      } : null,
+      messages: messages || []
     };
   });
 
@@ -104,7 +106,7 @@ router.get('/:id', (req, res) => {
  * PATCH /api/complaints/:id/status
  * Update complaint status (pending, in_progress, resolved, closed)
  */
-router.patch('/:id/status', requirePermission('can_update_status'), (req, res) => {
+router.patch('/:id/status', requirePermission('can_update_status'), async (req, res) => {
   const { status } = req.body;
   const allowed = ['pending', 'in_progress', 'resolved', 'closed'];
 
@@ -112,7 +114,7 @@ router.patch('/:id/status', requirePermission('can_update_status'), (req, res) =
     return res.status(400).json({ error: `Invalid status. Must be one of: ${allowed.join(', ')}` });
   }
 
-  const updated = store.updateComplaint(req.params.id, { status }, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, { status }, req.org.id);
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
@@ -137,7 +139,7 @@ router.patch('/:id/status', requirePermission('can_update_status'), (req, res) =
  * PATCH /api/complaints/:id/assign
  * Assign complaint to a team member
  */
-router.patch('/:id/assign', requirePermission('can_assign'), (req, res) => {
+router.patch('/:id/assign', requirePermission('can_assign'), async (req, res) => {
   const { assigned_to } = req.body; // user ID or null to unassign
 
   let assigneeName = 'Unassigned';
@@ -149,7 +151,7 @@ router.patch('/:id/assign', requirePermission('can_assign'), (req, res) => {
     assigneeName = assignee.name;
   }
 
-  const updated = store.updateComplaint(req.params.id, { assigned_to: assigned_to || null }, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, { assigned_to: assigned_to || null }, req.org.id);
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
@@ -174,7 +176,7 @@ router.patch('/:id/assign', requirePermission('can_assign'), (req, res) => {
  * PATCH /api/complaints/:id/category
  * Update category or priority
  */
-router.patch('/:id/category', (req, res) => {
+router.patch('/:id/category', async (req, res) => {
   const { category, priority } = req.body;
   const updates = {};
 
@@ -194,7 +196,7 @@ router.patch('/:id/category', (req, res) => {
     updates.priority = priority;
   }
 
-  const updated = store.updateComplaint(req.params.id, updates, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, updates, req.org.id);
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }

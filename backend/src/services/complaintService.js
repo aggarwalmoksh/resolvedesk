@@ -16,7 +16,7 @@ export function detectCategory(text) {
     },
     {
       category: 'product',
-      keywords: ['flower', 'wilted', 'damaged', 'broken', 'quality', 'wrong item', 'bouquet', 'decayed', 'stale', 'smell', 'rotten', 'fresh']
+      keywords: ['flower', 'wilted', 'damaged', 'broken', 'quality', 'wrong item', 'item', 'decayed', 'stale', 'smell', 'rotten', 'fresh']
     },
     {
       category: 'billing',
@@ -95,7 +95,7 @@ export async function ingestTelegramMessage(bot, telegramMessage) {
   // 4. Send automated acknowledgment on new ticket
   if (isNewTicket) {
     try {
-      const ackText = `🌸 Hello! We have received your complaint [${complaint.ticket_number}].\nOur team is reviewing it and will respond here shortly.`;
+      const ackText = `✨ Hello! We have received your complaint [${complaint.ticket_number}].\nOur team is reviewing it and will respond here shortly.`;
       await sendTelegramReply(bot.bot_token, customer.telegram_user_id, ackText, messageId);
       console.log(`📤 [Telegram Reply] Sent auto-acknowledgment for ticket [${complaint.ticket_number}] to user ${customer.telegram_user_id}`);
     } catch (err) {

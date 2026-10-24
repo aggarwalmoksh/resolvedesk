@@ -72,7 +72,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`\n=============================================================`);
   console.log(`🚀 ResolveDesk SaaS Backend running on port ${PORT}`);
   console.log(`📊 Health Check & Discovery: http://localhost:${PORT}/`);
@@ -93,6 +93,14 @@ app.listen(PORT, async () => {
     }
   }
   console.log(`\nReady to receive Telegram messages!\n`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`ℹ️ [Server] Port ${PORT} is active.`);
+  } else {
+    throw err;
+  }
 });
 
 export default app;

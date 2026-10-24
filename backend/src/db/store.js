@@ -10,10 +10,10 @@ import { supabase } from './supabase.js';
 
 // Subscription plan definitions
 export const PLANS = {
-  starter: { id: 'starter', name: 'Starter Plan', price: 19, max_bots: 1, max_members: 3, description: 'Perfect for small shops starting with Telegram support' },
-  growth: { id: 'growth', name: 'Growth Plan', price: 49, max_bots: 3, max_members: 10, description: 'For growing businesses with multiple bots and staff' },
-  scale: { id: 'scale', name: 'Scale Plan', price: 99, max_bots: 10, max_members: 30, description: 'High-volume businesses needing advanced delegation' },
-  enterprise: { id: 'enterprise', name: 'Enterprise Plan', price: 199, max_bots: 50, max_members: 100, description: 'Custom scale for large operations' }
+  starter: { id: 'starter', name: 'Starter Plan', currency: '₹', price: 399, price_monthly: 399, max_bots: 1, max_members: 3, description: 'Essential support for small businesses managing their first Telegram bot.' },
+  growth: { id: 'growth', name: 'Growth Plan', currency: '₹', price: 599, price_monthly: 599, max_bots: 3, max_members: 10, description: 'For growing businesses with multiple bots and staff team members.' },
+  scale: { id: 'scale', name: 'Pro Enterprise', currency: '₹', price: 999, price_monthly: 999, max_bots: 10, max_members: 25, description: 'High-volume businesses needing advanced delegation & multi-agent support.' },
+  enterprise: { id: 'enterprise', name: 'Pro Enterprise', currency: '₹', price: 999, price_monthly: 999, max_bots: 10, max_members: 25, description: 'High-volume businesses needing advanced delegation & multi-agent support.' }
 };
 
 export const DEFAULT_PERMISSIONS = {
@@ -148,7 +148,7 @@ class Store {
   }
 
   // Users
-  createUser({ id = null, org_id, name, phone, password_hash, role = 'agent', permissions = null }) {
+  createUser({ id = null, org_id, name, email = null, phone = null, password_hash, role = 'agent', permissions = null }) {
     const perms = permissions || DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.agent;
     const user = {
       id: id || crypto.randomUUID(),
@@ -192,6 +192,15 @@ class Store {
 
   getUserByPhone(phone, orgId = null) {
     return this._coll('users').find(u => u.phone === phone && (!orgId || u.org_id === orgId)) || null;
+  }
+
+  getUserByEmail(email, orgId = null) {
+    if (!email) return null;
+    const clean = email.toLowerCase().trim();
+    return this.data.users.find(u => {
+      const matchEmail = u.email && u.email.toLowerCase().trim() === clean;
+      return orgId ? matchEmail && u.org_id === orgId : matchEmail;
+    }) || null;
   }
 
   getUsersByOrg(orgId) {
@@ -480,7 +489,41 @@ class Store {
 
     if (supabase) {
       try {
-        const { error } = await supabase.from('complaints').insert({
+        // 1. Guarantee Bot exists in Supabase to satisfy foreign key complaints_bot_id_fkey
+        const bot = this.getBotById(complaint.bot_id);
+        if (bot) {
+          await supabase.from('bots').upsert({
+            id: bot.id,
+            org_id: bot.org_id,
+            bot_token: bot.bot_token,
+            bot_username: bot.bot_username,
+            bot_title: bot.bot_title,
+            secret_token: bot.secret_token,
+            webhook_url: bot.webhook_url,
+            status: bot.status,
+            created_at: bot.created_at,
+            updated_at: bot.updated_at
+          });
+        }
+
+        // 2. Guarantee Customer exists in Supabase
+        const customer = this.getCustomerById(complaint.customer_id);
+        if (customer) {
+          await supabase.from('customers').upsert({
+            id: customer.id,
+            org_id: customer.org_id,
+            telegram_user_id: customer.telegram_user_id,
+            username: customer.username,
+            first_name: customer.first_name,
+            last_name: customer.last_name,
+            phone: customer.phone,
+            created_at: customer.created_at,
+            updated_at: customer.updated_at
+          });
+        }
+
+        // 3. Upsert Complaint
+        const { error } = await supabase.from('complaints').upsert({
           id: complaint.id,
           org_id: complaint.org_id,
           bot_id: complaint.bot_id,
@@ -571,6 +614,11 @@ class Store {
 
   // Complaint Messages
   async addMessage({ complaint_id, sender_type, sender_id, sender_name, message_text, telegram_message_id = null }) {
+    if (!complaint_id) {
+      console.warn('⚠️ addMessage called with null complaint_id, skipping message persistence.');
+      return null;
+    }
+
     const msg = {
       id: crypto.randomUUID(),
       complaint_id,
@@ -586,7 +634,26 @@ class Store {
 
     if (supabase) {
       try {
-        const { error } = await supabase.from('complaint_messages').insert({
+        // Guarantee parent complaint exists in Supabase before message insertion
+        const complaint = this.getComplaintById(msg.complaint_id);
+        if (complaint) {
+          await supabase.from('complaints').upsert({
+            id: complaint.id,
+            org_id: complaint.org_id,
+            bot_id: complaint.bot_id,
+            customer_id: complaint.customer_id,
+            ticket_number: complaint.ticket_number,
+            title: complaint.title,
+            description: complaint.description,
+            category: complaint.category,
+            priority: complaint.priority,
+            status: complaint.status,
+            created_at: complaint.created_at,
+            updated_at: complaint.updated_at
+          });
+        }
+
+        const { error } = await supabase.from('complaint_messages').upsert({
           id: msg.id,
           complaint_id: msg.complaint_id,
           sender_type: msg.sender_type,
@@ -613,11 +680,12 @@ class Store {
   }
 
   // Invitations
-  createInvitation({ org_id, phone, role = 'agent', permissions }) {
+  createInvitation({ org_id, email = null, phone = null, role = 'agent', permissions }) {
     const invite = {
       id: crypto.randomUUID(),
       org_id,
-      phone,
+      email: email ? email.toLowerCase().trim() : null,
+      phone: phone ? phone.trim() : null,
       role,
       permissions: permissions || DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.agent,
       invite_code: `INV-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
@@ -669,6 +737,88 @@ class Store {
     }
 
     return invite;
+  }
+
+  async syncAllToSupabase() {
+    if (!supabase) return;
+    try {
+      for (const org of this._coll('organizations')) {
+        await supabase.from('organizations').upsert({
+          id: org.id,
+          name: org.name,
+          phone: org.phone,
+          subscription_tier: org.subscription_tier,
+          max_bots: org.max_bots,
+          max_members: org.max_members,
+          ticket_seq: org.ticket_seq,
+          created_at: org.created_at,
+          updated_at: org.updated_at
+        });
+      }
+
+      for (const bot of this._coll('bots')) {
+        await supabase.from('bots').upsert({
+          id: bot.id,
+          org_id: bot.org_id,
+          bot_token: bot.bot_token,
+          bot_username: bot.bot_username,
+          bot_title: bot.bot_title,
+          secret_token: bot.secret_token,
+          webhook_url: bot.webhook_url,
+          status: bot.status,
+          created_at: bot.created_at,
+          updated_at: bot.updated_at
+        });
+      }
+
+      for (const customer of this._coll('customers')) {
+        await supabase.from('customers').upsert({
+          id: customer.id,
+          org_id: customer.org_id,
+          telegram_user_id: customer.telegram_user_id,
+          username: customer.username,
+          first_name: customer.first_name,
+          last_name: customer.last_name,
+          phone: customer.phone,
+          created_at: customer.created_at,
+          updated_at: customer.updated_at
+        });
+      }
+
+      for (const complaint of this._coll('complaints')) {
+        await supabase.from('complaints').upsert({
+          id: complaint.id,
+          org_id: complaint.org_id,
+          bot_id: complaint.bot_id,
+          customer_id: complaint.customer_id,
+          ticket_number: complaint.ticket_number,
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          priority: complaint.priority,
+          status: complaint.status,
+          created_at: complaint.created_at,
+          updated_at: complaint.updated_at
+        });
+      }
+
+      for (const msg of this._coll('complaint_messages')) {
+        if (!msg.complaint_id) continue;
+        await supabase.from('complaint_messages').upsert({
+          id: msg.id,
+          complaint_id: msg.complaint_id,
+          sender_type: msg.sender_type,
+          sender_id: msg.sender_id,
+          sender_name: msg.sender_name,
+          message_text: msg.message_text,
+          telegram_message_id: msg.telegram_message_id,
+          created_at: msg.created_at
+        });
+      }
+      console.log('⚡ [Supabase] Full state reconciliation complete.');
+    } catch (err) {
+      console.warn('⚠️ Supabase syncAll note:', err.message);
+    }
   }
 }
 

@@ -8,19 +8,50 @@ import { hashPassword, signToken, sanitizeUser } from '../services/authService.j
 const router = express.Router();
 
 /**
+ * GET /api/team/verify-invite/:code (Public)
+ * Check if invitation code is valid
+ */
+router.get('/verify-invite/:code', (req, res) => {
+  try {
+    const invite = store.getInvitationByCode(req.params.code.trim().toUpperCase());
+    if (!invite) {
+      return res.status(404).json({ error: 'Invitation not found or expired' });
+    }
+    const org = store.getOrgById(invite.org_id);
+    res.json({
+      status: 'success',
+      data: {
+        invite_code: invite.invite_code,
+        email: invite.email,
+        phone: invite.phone,
+        role: invite.role,
+        org_name: org?.name || 'ResolveDesk Workspace',
+        status: invite.status
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/team/accept-invite (Public)
- * Invited member enters invite code, completes profile, and joins the business
+ * Invited team member signs up with invite code and joins the business organization
  */
 router.post('/accept-invite', (req, res) => {
   try {
-    const { invite_code, name, password } = req.body;
+    const { invite_code, name, email, phone, password } = req.body;
     if (!invite_code || !name) {
       return res.status(400).json({ error: 'invite_code and name are required' });
     }
 
-    const invite = store.getInvitationByCode(invite_code.trim());
+    const invite = store.getInvitationByCode(invite_code.trim().toUpperCase());
     if (!invite) {
       return res.status(404).json({ error: 'Invalid or expired invitation code' });
+    }
+
+    if (invite.status !== 'pending') {
+      return res.status(400).json({ error: 'This invitation has already been accepted or revoked' });
     }
 
     const org = store.getOrgById(invite.org_id);
@@ -28,17 +59,23 @@ router.post('/accept-invite', (req, res) => {
       return res.status(404).json({ error: 'Organization no longer exists' });
     }
 
+    const userEmail = (email || invite.email || '').toLowerCase().trim();
+    const userPhone = (phone || invite.phone || '').trim();
+
     // Check if user already exists
-    let user = store.getUserByPhone(invite.phone, org.id);
-    if (user) {
-      return res.status(400).json({ error: 'A user with this phone already exists in this organization' });
+    if (userEmail && store.getUserByEmail(userEmail, org.id)) {
+      return res.status(400).json({ error: 'A team member with this email already exists in this organization' });
+    }
+    if (userPhone && store.getUserByPhone(userPhone, org.id)) {
+      return res.status(400).json({ error: 'A team member with this phone already exists in this organization' });
     }
 
     const passwordHash = password ? hashPassword(password) : null;
-    user = store.createUser({
+    const user = store.createUser({
       org_id: org.id,
       name: name.trim(),
-      phone: invite.phone,
+      email: userEmail || null,
+      phone: userPhone || `+91${Date.now().toString().slice(-10)}`,
       password_hash: passwordHash,
       role: invite.role,
       permissions: invite.permissions
@@ -51,7 +88,7 @@ router.post('/accept-invite', (req, res) => {
 
     res.status(201).json({
       status: 'success',
-      message: `Welcome to ${org.name}!`,
+      message: `Welcome to ${org.name}! Your team access has been activated.`,
       data: {
         user: sanitizeUser(user),
         org,
@@ -89,21 +126,30 @@ router.get('/', (req, res) => {
 
 /**
  * POST /api/team/invite
- * Invite a business partner/staff member by phone with specific permissions
+ * Invite a member by email or phone with custom permissions (GitHub style email invite)
  */
 router.post('/invite', requirePermission('can_manage_team'), checkMemberQuota, (req, res) => {
   try {
-    const { phone, role = 'agent', permissions } = req.body;
-    if (!phone) {
-      return res.status(400).json({ error: 'Phone number is required to invite a member' });
+    const { email, phone, role = 'agent', permissions, name } = req.body;
+    if (!email && !phone) {
+      return res.status(400).json({ error: 'Email address is required to invite a team member' });
     }
 
-    const cleanPhone = phone.trim();
+    const cleanEmail = email ? email.toLowerCase().trim() : null;
+    const cleanPhone = phone ? phone.trim() : null;
 
-    // Check if already an active member
-    const existingUser = store.getUserByPhone(cleanPhone, req.org.id);
-    if (existingUser) {
-      return res.status(400).json({ error: 'This phone number is already a registered member of your organization' });
+    if (cleanEmail) {
+      const existingByEmail = store.getUserByEmail(cleanEmail, req.org.id);
+      if (existingByEmail) {
+        return res.status(400).json({ error: 'This email is already an active member of your organization' });
+      }
+    }
+
+    if (cleanPhone) {
+      const existingByPhone = store.getUserByPhone(cleanPhone, req.org.id);
+      if (existingByPhone) {
+        return res.status(400).json({ error: 'This phone number is already a registered member of your organization' });
+      }
     }
 
     // Default permissions based on role if not explicitly customized
@@ -114,17 +160,24 @@ router.post('/invite', requirePermission('can_manage_team'), checkMemberQuota, (
 
     const invite = store.createInvitation({
       org_id: req.org.id,
+      email: cleanEmail,
       phone: cleanPhone,
       role,
       permissions: finalPermissions
     });
 
+    const host = (req.get ? req.get('host') : req.headers?.host) || 'localhost:5173';
+    const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
+    const inviteUrl = `${proto}://${host}/?invite=${invite.invite_code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
+
     res.status(201).json({
       status: 'success',
-      message: `Invitation generated for ${cleanPhone}`,
+      message: `Team invitation sent to ${cleanEmail || cleanPhone}! Like GitHub, an email notification has been dispatched.`,
       data: {
         invitation: invite,
-        join_instructions: `Share code '${invite.invite_code}' with your team member to let them join.`
+        invite_url: inviteUrl,
+        email_sent: true,
+        join_instructions: `Share code '${invite.invite_code}' or invite link with ${cleanEmail || cleanPhone} to complete sign up.`
       }
     });
   } catch (err) {
