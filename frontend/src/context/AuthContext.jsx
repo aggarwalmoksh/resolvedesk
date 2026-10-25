@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from 'react';
 import { useAuth as useClerkAuth, useUser } from '@clerk/react';
-import { api, setAuthToken } from '../services/api';
+import { api, setAuthToken, setTokenGetter } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -28,6 +28,12 @@ export const AuthProvider = ({ children }) => {
     });
   }, [isLoaded, isSignedIn, clerkUser]);
 
+
+  useEffect(() => {
+    if (typeof getToken === 'function') {
+      setTokenGetter(getToken);
+    }
+  }, [getToken]);
 
   const [user, setUser] = useState(null);
   const [org, setOrg] = useState(null);

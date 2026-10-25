@@ -1,6 +1,7 @@
 import express from 'express';
 import { store } from '../db/store.js';
 import { ingestTelegramMessage } from '../services/complaintService.js';
+import { deleteBotWebhook } from '../services/telegramService.js';
 import { ENFORCE_SECRET_TOKEN, BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL } from '../config.js';
 
 const router = express.Router();
@@ -32,6 +33,40 @@ router.get('/webhook/:botId', async (req, res) => {
 });
 
 /**
+ * Helper to strictly verify if a bot is authorized to process messages
+ * under current organization subscription limits.
+ */
+async function isBotAllowed(bot) {
+  if (!bot) return false;
+
+  // 1. If status is not active (e.g. paused or suspended), reject strictly
+  if (bot.status !== 'active') {
+    return false;
+  }
+
+  // 2. Check organization subscription max_bots limit
+  if (bot.org_id) {
+    const org = await store.getOrgById(bot.org_id);
+    if (org && typeof org.max_bots === 'number') {
+      const orgBots = await store.getBotsByOrg(org.id);
+      const activeBots = orgBots.filter(b => b.status === 'active');
+      const botIndex = activeBots.findIndex(b => b.id === bot.id);
+
+      if (botIndex >= org.max_bots) {
+        console.warn(`⏸️  [Webhook] Bot @${bot.bot_username} exceeds organization subscription limit (${org.max_bots}). Automatically pausing bot & removing webhook.`);
+        await store.updateBot(bot.id, { status: 'paused' });
+        try {
+          await deleteBotWebhook(bot.bot_token);
+        } catch (e) {}
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
  * Dynamic Multi-Bot Webhook Endpoint
  * POST /telegram/webhook/:botId
  */
@@ -44,10 +79,11 @@ router.post('/webhook/:botId', async (req, res) => {
     return res.status(404).send('Bot not found');
   }
 
-  // Check if bot is paused due to subscription downgrade
-  if (bot.status === 'paused' || bot.status === 'suspended') {
-    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is ${bot.status} due to plan limits. Update ignored.`);
-    return res.status(200).send('Bot paused');
+  // Strictly check if bot is allowed and within subscription quota
+  const allowed = await isBotAllowed(bot);
+  if (!allowed) {
+    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is paused or exceeds current subscription. Update dropped strictly.`);
+    return res.status(200).send('Bot not active');
   }
 
   // Verify secret token
@@ -86,10 +122,11 @@ router.post('/webhook', async (req, res) => {
     return res.sendStatus(200);
   }
 
-  // Check if bot is paused due to subscription downgrade
-  if (bot.status === 'paused' || bot.status === 'suspended') {
-    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is ${bot.status} due to plan limits. Update ignored.`);
-    return res.status(200).send('Bot paused');
+  // Strictly check if bot is allowed and within subscription quota
+  const allowed = await isBotAllowed(bot);
+  if (!allowed) {
+    console.log(`⏸️  [Webhook] Bot @${bot.bot_username} is paused or exceeds current subscription. Update dropped strictly.`);
+    return res.status(200).send('Bot not active');
   }
 
   // 2. Secret token check

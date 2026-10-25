@@ -9,9 +9,9 @@ export const PLANS = {
 };
 
 export const DEFAULT_PERMISSIONS = {
-  owner: { can_reply: true, can_update_status: true, can_assign: true, can_manage_team: true, can_manage_bots: true },
-  admin: { can_reply: true, can_update_status: true, can_assign: true, can_manage_team: true, can_manage_bots: true },
-  agent: { can_reply: true, can_update_status: true, can_assign: false, can_manage_team: false, can_manage_bots: false }
+  owner: { can_reply: true, can_update_status: true, can_assign: true, can_manage_team: true, can_manage_bots: true, can_view_analytics: true },
+  admin: { can_reply: true, can_update_status: true, can_assign: true, can_manage_team: true, can_manage_bots: true, can_view_analytics: true },
+  agent: { can_reply: true, can_update_status: true, can_assign: false, can_manage_team: false, can_manage_bots: false, can_view_analytics: true }
 };
 
 function db() {
@@ -31,7 +31,19 @@ class SupabaseStore {
   async getUserByEmail(email, orgId = null) { if (!email) return null; let query = db().from('users').select('*').eq('email', email.toLowerCase()); if (orgId) query = query.eq('org_id', orgId); const { data, error } = await query.maybeSingle(); checked(error, 'Could not load member'); return data; }
   async getUsersByOrg(orgId) { const { data, error } = await db().from('users').select('*').eq('org_id', orgId).eq('is_active', true).order('created_at'); checked(error, 'Could not load members'); return data || []; }
   async updateUser(id, updates) { const { data, error } = await db().from('users').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().maybeSingle(); checked(error, 'Could not update member'); return data; }
-  async deleteUser(id) { const { error } = await db().from('users').delete().eq('id', id); checked(error, 'Could not remove member'); return true; }
+  async deleteUser(id) {
+    if (!id) return false;
+    const user = await this.getUserById(id);
+    if (user?.org_id && user?.email) {
+      try {
+        await db().from('invitations').delete().eq('org_id', user.org_id).eq('email', user.email.toLowerCase());
+      } catch {}
+    }
+    await db().from('complaints').update({ assigned_to: null }).eq('assigned_to', id);
+    const { error } = await db().from('users').delete().eq('id', id);
+    checked(error, 'Could not remove member from Supabase');
+    return true;
+  }
 
   async getBotsByOrg(orgId) { const { data, error } = await db().from('bots').select('*').eq('org_id', orgId).order('created_at'); checked(error, 'Could not load bots'); return data || []; }
   async getBotById(id) { const { data, error } = await db().from('bots').select('*').eq('id', id).maybeSingle(); checked(error, 'Could not load bot'); return data; }

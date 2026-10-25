@@ -79,23 +79,29 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
 
     // 1. Handle Bot Capacity Adjustments
     if (currentBots.length > targetPlan.max_bots) {
-      // Downgrade scenario: Keep first targetPlan.max_bots active, pause the rest
+      // Downgrade scenario: Keep first targetPlan.max_bots active, strictly pause and deregister the rest
       for (let i = 0; i < currentBots.length; i++) {
         const b = currentBots[i];
         if (i < targetPlan.max_bots) {
           if (b.status !== 'active') {
             await store.updateBot(b.id, { status: 'active' });
+            try {
+              if (b.webhook_url && b.secret_token) {
+                await registerBotWebhook(b.bot_token, b.webhook_url, b.secret_token);
+              }
+            } catch (err) {
+              console.warn(`Could not register webhook for bot @${b.bot_username}:`, err.message);
+            }
           }
         } else {
-          if (b.status !== 'paused') {
-            await store.updateBot(b.id, { status: 'paused' });
-            botsPaused++;
-            try {
-              await deleteBotWebhook(b.bot_token);
-              console.log(`⏸️  [Downgrade] Paused bot @${b.bot_username} and deleted Telegram webhook`);
-            } catch (err) {
-              console.warn(`Could not delete webhook for paused bot @${b.bot_username}:`, err.message);
-            }
+          // Strictly pause excess bot and delete its Telegram webhook
+          await store.updateBot(b.id, { status: 'paused' });
+          botsPaused++;
+          try {
+            await deleteBotWebhook(b.bot_token);
+            console.log(`⏸️  [Downgrade] Paused excess bot @${b.bot_username} and deleted Telegram webhook`);
+          } catch (err) {
+            console.warn(`Could not delete webhook for paused bot @${b.bot_username}:`, err.message);
           }
         }
       }

@@ -209,16 +209,27 @@ export const DataProvider = ({ children }) => {
 
   // Update permissions for team member
   const updateMemberPermissions = async (memberId, permissions) => {
-    try {
-      await api.updatePermissions(memberId, permissions);
-    } catch (e) {}
-
+    // Optimistic update
     setTeam(prev => ({
       ...prev,
       members: prev.members.map(m => m.id === memberId ? { ...m, permissions } : m)
     }));
 
-    showToast('Member permissions updated');
+    try {
+      const updatedUser = await api.updatePermissions(memberId, permissions);
+      if (updatedUser?.permissions) {
+        setTeam(prev => ({
+          ...prev,
+          members: prev.members.map(m => m.id === memberId ? { ...m, permissions: updatedUser.permissions } : m)
+        }));
+      }
+      showToast('Member permissions updated');
+    } catch (e) {
+      console.error('Failed to update member permissions:', e);
+      const errorMsg = e.message === 'Failed to fetch' ? 'Connection error: backend is unreachable' : (e.message || 'Failed to update permissions');
+      showToast(errorMsg, 'error');
+      refreshAll();
+    }
   };
 
   // Invite member by email (GitHub Style)
@@ -281,6 +292,38 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  // Delete bot permanently
+  const deleteBot = async (botId) => {
+    try {
+      const res = await api.deleteBot(botId);
+      setBots(prev => prev.filter(b => b.id !== botId));
+      await refreshAll();
+      showToast(res?.message || 'Bot deleted permanently');
+      return res;
+    } catch (err) {
+      showToast(err.message || 'Failed to delete bot', 'error');
+      throw err;
+    }
+  };
+
+  // Remove team member (Owner only)
+  const deleteMember = async (memberId) => {
+    try {
+      const res = await api.deleteMember(memberId);
+      setTeam(prev => ({
+        ...prev,
+        members: prev.members.filter(m => m.id !== memberId)
+      }));
+      await refreshAll();
+      showToast(res?.message || 'Member removed successfully');
+      return res;
+    } catch (err) {
+      showToast(err.message || 'Failed to remove member', 'error');
+      throw err;
+    }
+  };
+
+
   return (
     <DataContext.Provider
       value={{
@@ -303,6 +346,8 @@ export const DataProvider = ({ children }) => {
         linkBot,
         activateBot,
         pauseBot,
+        deleteBot,
+        deleteMember,
         upgradePlan,
         showToast
       }}

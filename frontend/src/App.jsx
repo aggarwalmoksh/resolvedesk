@@ -43,13 +43,13 @@ export function App() {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center text-slate-800">
+      <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#080D1A] flex flex-col items-center justify-center text-slate-800 dark:text-slate-100 transition-colors">
         <div className="relative flex items-center justify-center">
-          <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-md animate-pulse text-[#2B5484]">
+          <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-md animate-pulse text-[#2B5484] dark:text-[#A0BDDB]">
             <Inbox className="w-7 h-7" />
           </div>
         </div>
-        <p className="mt-4 text-xs font-serif text-slate-600 tracking-wider uppercase font-semibold">
+        <p className="mt-4 text-xs font-serif text-slate-600 dark:text-slate-300 tracking-wider uppercase font-semibold">
           Loading ResolveDesk...
         </p>
       </div>
@@ -62,7 +62,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans selection:bg-[#A0BDDB] selection:text-slate-900">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#080D1A] text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-[#A0BDDB] selection:text-slate-900 transition-colors">
       
       {/* Top Navbar */}
       <Navbar />
@@ -125,18 +125,18 @@ export function App() {
       />
 
       {/* Clean Minimal Footer */}
-      <footer className="w-full border-t border-slate-200 py-6 text-center text-xs text-slate-500 bg-white">
+      <footer className="w-full border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-[#0B1120] transition-colors">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#2B5484]" />
-            <span className="font-serif text-slate-800 font-bold">ResolveDesk</span>
+            <span className="w-2 h-2 rounded-full bg-[#2B5484] dark:bg-[#A0BDDB]" />
+            <span className="font-serif text-slate-800 dark:text-slate-200 font-bold">ResolveDesk</span>
             <span>• Intelligent Telegram Complaint Command Center</span>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] text-slate-500">
+          <div className="flex items-center gap-4 text-[11px] text-slate-500 dark:text-slate-400">
             <span>Clerk Auth & Supabase</span>
             <span>•</span>
-            <span className="font-mono text-[#2B5484] font-medium">HEX: #A0BDDB</span>
+            <span className="font-mono text-[#2B5484] dark:text-[#A0BDDB] font-medium">HEX: #A0BDDB</span>
             <span>•</span>
             <span>driver.js Onboarding</span>
           </div>

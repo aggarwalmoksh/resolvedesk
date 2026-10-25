@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -12,7 +13,7 @@ export default {
           100: '#E4EDF5',
           200: '#CDDEEE',
           300: '#B2CDE5',
-          400: '#A0BDDB', // Requested Brand Color: CMYK 27, 14, 0, 14 | RGB 160,189,219 | #A0BDDB
+          400: '#A0BDDB',
           500: '#7B9DC2',
           600: '#5A7CA1',
           700: '#415B78',
@@ -32,8 +33,8 @@ export default {
         }
       },
       fontFamily: {
-        serif: ['"DM Serif Display"', '"Playfair Display"', 'Georgia', 'serif'],
-        playfair: ['"Playfair Display"', 'Georgia', 'serif'],
+        serif: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        playfair: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
         sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
