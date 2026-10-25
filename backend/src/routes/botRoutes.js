@@ -14,8 +14,9 @@ router.use(authMiddleware);
  * GET /api/bots
  * List all linked Telegram bots for the organization
  */
-router.get('/', (req, res) => {
-  const bots = store.getBotsByOrg(req.org.id).map(b => {
+router.get('/', async (req, res, next) => {
+  try {
+  const bots = (await store.getBotsByOrg(req.org.id)).map(b => {
     // Mask bot token for security
     const maskedToken = b.bot_token.length > 10 ? `${b.bot_token.substring(0, 6)}...${b.bot_token.substring(b.bot_token.length - 4)}` : '***';
     return {
@@ -39,6 +40,7 @@ router.get('/', (req, res) => {
       }
     }
   });
+  } catch (error) { next(error); }
 });
 
 /**
@@ -55,7 +57,7 @@ router.post('/', requirePermission('can_manage_bots'), checkBotQuota, async (req
     const cleanToken = bot_token.trim();
 
     // Check if token already linked to any organization
-    const existing = store.getBotByToken(cleanToken);
+    const existing = await store.getBotByToken(cleanToken);
     if (existing) {
       return res.status(400).json({ error: 'This Telegram bot is already linked to an organization' });
     }
@@ -77,7 +79,7 @@ router.post('/', requirePermission('can_manage_bots'), checkBotQuota, async (req
     }
 
     // 4. Save to store
-    const newBot = store.createBot({
+    const newBot = await store.createBot({
       id: tempBotId,
       org_id: req.org.id,
       bot_token: cleanToken,
@@ -109,7 +111,7 @@ router.post('/', requirePermission('can_manage_bots'), checkBotQuota, async (req
  */
 router.delete('/:id', requirePermission('can_manage_bots'), async (req, res) => {
   try {
-    const bot = store.getBotById(req.params.id);
+    const bot = await store.getBotById(req.params.id);
     if (!bot || bot.org_id !== req.org.id) {
       return res.status(404).json({ error: 'Bot not found in your organization' });
     }
@@ -121,7 +123,7 @@ router.delete('/:id', requirePermission('can_manage_bots'), async (req, res) => 
       console.warn('⚠️ Failed to delete webhook from Telegram:', err.message);
     }
 
-    store.deleteBot(bot.id);
+    await store.deleteBot(bot.id);
 
     res.json({
       status: 'success',
@@ -138,7 +140,7 @@ router.delete('/:id', requirePermission('can_manage_bots'), async (req, res) => 
  */
 router.post('/:id/sync', requirePermission('can_manage_bots'), async (req, res) => {
   try {
-    const bot = store.getBotById(req.params.id);
+    const bot = await store.getBotById(req.params.id);
     if (!bot || bot.org_id !== req.org.id) {
       return res.status(404).json({ error: 'Bot not found in your organization' });
     }
@@ -147,7 +149,7 @@ router.post('/:id/sync', requirePermission('can_manage_bots'), async (req, res) 
     const webhookUrl = `${baseUrl}/telegram/webhook/${bot.id}`;
 
     await registerBotWebhook(bot.bot_token, webhookUrl, bot.secret_token);
-    store.updateBot(bot.id, { webhook_url: webhookUrl, status: 'active' });
+    await store.updateBot(bot.id, { webhook_url: webhookUrl, status: 'active' });
 
     res.json({
       status: 'success',
@@ -166,18 +168,18 @@ router.post('/:id/sync', requirePermission('can_manage_bots'), async (req, res) 
  */
 router.post('/:id/activate', requirePermission('can_manage_bots'), async (req, res) => {
   try {
-    const targetBot = store.getBotById(req.params.id);
+    const targetBot = await store.getBotById(req.params.id);
     if (!targetBot || targetBot.org_id !== req.org.id) {
       return res.status(404).json({ error: 'Bot not found in your organization' });
     }
 
-    const orgBots = store.getBotsByOrg(req.org.id);
+    const orgBots = await store.getBotsByOrg(req.org.id);
     const activeBots = orgBots.filter(b => b.status === 'active' && b.id !== targetBot.id);
 
     // If active bots meet max quota, pause the oldest active bot to make room
     if (activeBots.length >= req.org.max_bots) {
       const botToPause = activeBots[activeBots.length - 1];
-      store.updateBot(botToPause.id, { status: 'paused' });
+      await store.updateBot(botToPause.id, { status: 'paused' });
       try {
         await deleteBotWebhook(botToPause.bot_token);
         console.log(`⏸️  [Quota Shift] Paused bot @${botToPause.bot_username} to activate @${targetBot.bot_username}`);
@@ -185,7 +187,7 @@ router.post('/:id/activate', requirePermission('can_manage_bots'), async (req, r
     }
 
     // Activate target bot and re-register webhook
-    store.updateBot(targetBot.id, { status: 'active' });
+    await store.updateBot(targetBot.id, { status: 'active' });
     try {
       if (targetBot.webhook_url && targetBot.secret_token) {
         await registerBotWebhook(targetBot.bot_token, targetBot.webhook_url, targetBot.secret_token);
@@ -208,12 +210,12 @@ router.post('/:id/activate', requirePermission('can_manage_bots'), async (req, r
  */
 router.post('/:id/pause', requirePermission('can_manage_bots'), async (req, res) => {
   try {
-    const targetBot = store.getBotById(req.params.id);
+    const targetBot = await store.getBotById(req.params.id);
     if (!targetBot || targetBot.org_id !== req.org.id) {
       return res.status(404).json({ error: 'Bot not found in your organization' });
     }
 
-    store.updateBot(targetBot.id, { status: 'paused' });
+    await store.updateBot(targetBot.id, { status: 'paused' });
     try {
       await deleteBotWebhook(targetBot.bot_token);
     } catch (e) {}

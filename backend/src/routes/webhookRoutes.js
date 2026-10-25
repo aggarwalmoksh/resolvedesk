@@ -20,9 +20,9 @@ router.get('/webhook', (req, res) => {
 /**
  * GET /telegram/webhook/:botId
  */
-router.get('/webhook/:botId', (req, res) => {
+router.get('/webhook/:botId', async (req, res) => {
   const { botId } = req.params;
-  const bot = store.getBotById(botId);
+  const bot = await store.getBotById(botId);
   res.json({
     status: 'ok',
     botId,
@@ -37,11 +37,7 @@ router.get('/webhook/:botId', (req, res) => {
  */
 router.post('/webhook/:botId', async (req, res) => {
   const { botId } = req.params;
-  let bot = store.getBotById(botId);
-
-  if (!bot && BOT_TOKEN) {
-    bot = await store.ensurePrimaryBot(BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL);
-  }
+  const bot = await store.getBotById(botId);
 
   if (!bot) {
     console.warn(`⚠️ [Webhook] Received update for unknown bot ID: ${botId}`);
@@ -82,16 +78,7 @@ router.post('/webhook', async (req, res) => {
   const update = req.body;
 
   // 1. Resolve active bot (match by configured BOT_TOKEN or fallback to first registered bot)
-  let bot = store.getBotByToken(BOT_TOKEN);
-
-  if (!bot) {
-    const allBots = store._coll('bots');
-    bot = allBots.find(b => b.bot_token === BOT_TOKEN) || allBots[0];
-  }
-
-  if (!bot && BOT_TOKEN) {
-    bot = await store.ensurePrimaryBot(BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL);
-  }
+  const bot = BOT_TOKEN ? await store.getBotByToken(BOT_TOKEN) : null;
 
   if (!bot) {
     console.warn('⚠️ [Webhook] No registered bot found to handle incoming update.');

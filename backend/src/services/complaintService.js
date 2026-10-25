@@ -58,7 +58,7 @@ export async function ingestTelegramMessage(bot, telegramMessage) {
   });
 
   // 2. Check for an active open ticket for this customer
-  let complaint = store.getActiveComplaintForCustomer(bot.org_id, customer.id);
+  let complaint = await store.getActiveComplaintForCustomer(bot.org_id, customer.id);
   let isNewTicket = false;
 
   if (!complaint) {
@@ -110,13 +110,13 @@ export async function ingestTelegramMessage(bot, telegramMessage) {
  * Staff reply to customer - saves in thread & dispatches to Telegram
  */
 export async function replyToComplaint({ complaintId, orgId, user, messageText }) {
-  const complaint = store.getComplaintById(complaintId, orgId);
+  const complaint = await store.getComplaintById(complaintId, orgId);
   if (!complaint) throw new Error('Complaint not found');
 
-  const customer = store.getCustomerById(complaint.customer_id);
+  const customer = await store.getCustomerById(complaint.customer_id);
   if (!customer) throw new Error('Customer not found');
 
-  const bot = store.getBotById(complaint.bot_id);
+  const bot = await store.getBotById(complaint.bot_id);
   if (!bot) throw new Error('Originating Telegram bot not found');
 
   // Record staff message in conversation thread

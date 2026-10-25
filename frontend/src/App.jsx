@@ -134,7 +134,7 @@ export function App() {
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
-            <span>Supabase Auth & PostgreSQL</span>
+            <span>Clerk Auth & Supabase</span>
             <span>•</span>
             <span className="font-mono text-[#2B5484] font-medium">HEX: #A0BDDB</span>
             <span>•</span>

@@ -15,9 +15,9 @@ router.use(authMiddleware);
  * ?assigned_to=userId
  * ?search=query
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res, next) => {
   const { status, category, assigned_to, bot_id, search } = req.query;
-  const complaints = store.getComplaints(req.org.id, {
+  const complaints = await store.getComplaints(req.org.id, {
     status,
     category,
     assigned_to,
@@ -26,11 +26,11 @@ router.get('/', (req, res) => {
   });
 
   // Enrich complaints with customer and assignee names
-  const enriched = complaints.map(c => {
-    const customer = store.getCustomerById(c.customer_id);
-    const assignee = c.assigned_to ? store.getUserById(c.assigned_to) : null;
-    const bot = store.getBotById(c.bot_id);
-    const messages = store.getMessagesByComplaint(c.id);
+  const enriched = await Promise.all(complaints.map(async c => {
+    const customer = c.customers || await store.getCustomerById(c.customer_id);
+    const assignee = c.assignee || (c.assigned_to ? await store.getUserById(c.assigned_to) : null);
+    const bot = c.bots || await store.getBotById(c.bot_id);
+    const messages = await store.getMessagesByComplaint(c.id);
 
     return {
       ...c,
@@ -52,7 +52,7 @@ router.get('/', (req, res) => {
       } : null,
       messages: messages || []
     };
-  });
+  }));
 
   res.json({
     status: 'success',
@@ -65,16 +65,16 @@ router.get('/', (req, res) => {
  * GET /api/complaints/:id
  * Get full complaint detail, customer info, and message thread
  */
-router.get('/:id', (req, res) => {
-  const complaint = store.getComplaintById(req.params.id, req.org.id);
+router.get('/:id', async (req, res) => {
+  const complaint = await store.getComplaintById(req.params.id, req.org.id);
   if (!complaint) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
 
-  const customer = store.getCustomerById(complaint.customer_id);
-  const assignee = complaint.assigned_to ? store.getUserById(complaint.assigned_to) : null;
-  const bot = store.getBotById(complaint.bot_id);
-  const messages = store.getMessagesByComplaint(complaint.id);
+  const customer = complaint.customers || await store.getCustomerById(complaint.customer_id);
+  const assignee = complaint.assignee || (complaint.assigned_to ? await store.getUserById(complaint.assigned_to) : null);
+  const bot = complaint.bots || await store.getBotById(complaint.bot_id);
+  const messages = await store.getMessagesByComplaint(complaint.id);
 
   res.json({
     status: 'success',
@@ -120,7 +120,7 @@ router.patch('/:id/status', requirePermission('can_update_status'), async (req, 
   }
 
   // Record system audit message in thread
-  store.addMessage({
+  await store.addMessage({
     complaint_id: updated.id,
     sender_type: 'system',
     sender_id: req.user.id,
@@ -144,7 +144,7 @@ router.patch('/:id/assign', requirePermission('can_assign'), async (req, res) =>
 
   let assigneeName = 'Unassigned';
   if (assigned_to) {
-    const assignee = store.getUserById(assigned_to);
+    const assignee = await store.getUserById(assigned_to);
     if (!assignee || assignee.org_id !== req.org.id) {
       return res.status(400).json({ error: 'Assigned user does not exist in your organization' });
     }
@@ -157,7 +157,7 @@ router.patch('/:id/assign', requirePermission('can_assign'), async (req, res) =>
   }
 
   // Record assignment audit in thread
-  store.addMessage({
+  await store.addMessage({
     complaint_id: updated.id,
     sender_type: 'system',
     sender_id: req.user.id,

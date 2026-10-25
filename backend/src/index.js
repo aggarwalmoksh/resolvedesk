@@ -1,6 +1,17 @@
 import express from 'express';
-import { PORT, ECHO, ENFORCE_SECRET_TOKEN, BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL, SUPABASE_URL } from './config.js';
-import { store } from './db/store.js';
+import { clerkMiddleware } from '@clerk/express';
+import {
+  PORT,
+  ECHO,
+  ENFORCE_SECRET_TOKEN,
+  BOT_TOKEN,
+  SECRET_TOKEN,
+  PUBLIC_BASE_URL,
+  SUPABASE_URL,
+  CORS_ORIGINS,
+  CLERK_SECRET_KEY,
+  CLERK_PUBLISHABLE_KEY
+} from './config.js';
 
 // Route imports
 import authRoutes from './routes/authRoutes.js';
@@ -18,7 +29,12 @@ app.use(express.json());
 
 // Native CORS middleware (enables smooth frontend integration)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.get('origin')?.replace(/\/$/, '');
+  const isDev = process.env.NODE_ENV !== 'production';
+  if (origin && (CORS_ORIGINS.includes(origin) || (isDev && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)))) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Telegram-Bot-Api-Secret-Token');
   if (req.method === 'OPTIONS') {
@@ -27,6 +43,11 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(clerkMiddleware({
+  secretKey: CLERK_SECRET_KEY,
+  publishableKey: CLERK_PUBLISHABLE_KEY
+}));
+
 // Health check & API Discovery endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -34,7 +55,7 @@ app.get('/', (req, res) => {
     service: 'ResolveDesk SaaS Backend API',
     version: '2.0.0',
     endpoints: {
-      auth: '/api/auth (register, login, me)',
+      auth: '/api/auth (onboard-business, complete-invitation, me)',
       bots: '/api/bots (list, link, unlink, sync)',
       complaints: '/api/complaints (list, detail, status, assign, category, reply)',
       dashboard: '/api/dashboard (stats, categories, trends)',
@@ -42,11 +63,7 @@ app.get('/', (req, res) => {
       subscription: '/api/subscription (plans, upgrade)',
       telegramWebhook: '/telegram/webhook'
     },
-    state: {
-      organizations_count: store._coll('organizations').length,
-      linked_bots_count: store._coll('bots').length,
-      complaints_count: store._coll('complaints').length
-    }
+    state: { persistence: 'Supabase only', authentication: 'Clerk' }
   });
 });
 
@@ -69,7 +86,11 @@ app.use((req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.status(err.statusCode || 500).json({
+    error: isProduction ? 'Internal server error' : (err.message || 'Internal server error'),
+    ...(isProduction ? {} : { details: err.errors?.map(item => item.message || item.code) })
+  });
 });
 
 const server = app.listen(PORT, async () => {
@@ -82,28 +103,16 @@ const server = app.listen(PORT, async () => {
   }
   console.log(`⚡ Supabase Database       : ${SUPABASE_URL ? 'CONNECTED (' + SUPABASE_URL + ')' : 'NOT CONFIGURED'}`);
   console.log(`🔒 Secret Token Verify    : ${ENFORCE_SECRET_TOKEN ? 'STRICT (401 on mismatch)' : 'PERMISSIVE'}`);
-  console.log(`💾 Local Store Loaded From : ${store.isLoaded ? '.data/db.json' : 'in-memory'}`);
+  console.log(`💾 Persistence             : Supabase only (no local fallback)`);
   console.log(`=============================================================`);
 
-  try {
-    await store.syncWithSupabase();
-  } catch (err) {
-    console.warn('⚠️ Notice during Supabase sync:', err.message);
-  }
-
-  if (BOT_TOKEN) {
-    try {
-      await store.ensurePrimaryBot(BOT_TOKEN, SECRET_TOKEN, PUBLIC_BASE_URL);
-    } catch (err) {
-      console.warn('⚠️ Notice during primary bot setup:', err.message);
-    }
-  }
   console.log(`\nReady to receive Telegram messages!\n`);
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.log(`ℹ️ [Server] Port ${PORT} is active.`);
+    console.error(`❌ [Server] Port ${PORT} is already occupied by another process. Please terminate it (e.g. 'kill -9 $(lsof -ti:${PORT})') and restart.`);
+    process.exit(1);
   } else {
     throw err;
   }

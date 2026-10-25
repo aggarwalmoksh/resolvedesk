@@ -1,269 +1,141 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { api, setAuthToken, getAuthToken } from '../services/api';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
+import { useAuth as useClerkAuth, useUser } from '@clerk/react';
+import { api, setAuthToken } from '../services/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [session, setSession] = useState(null);
+  const {
+    isLoaded,
+    isSignedIn,
+    getToken,
+    signOut: clerkSignOut,
+  } = useClerkAuth();
+
+  const { user: clerkUser } = useUser();
+
   const [user, setUser] = useState(null);
   const [org, setOrg] = useState(null);
-  const [token, setToken] = useState(getAuthToken() || null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // Business Personas for testing Granular Roles & Permissions
-  const personas = [
-    {
-      id: 'usr-owner',
-      name: 'Alex Morgan (Owner)',
-      role: 'owner',
-      phone: '+919876543210',
-      badge: 'Business Founder & Owner',
-      permissions: {
-        can_reply: true,
-        can_update_status: true,
-        can_assign: true,
-        can_manage_bots: true,
-        can_view_analytics: true,
-        can_manage_team: true
+  const refresh = useCallback(async () => {
+    try {
+      if (!isSignedIn && !clerkUser) {
+        setAuthToken(null);
+        setUser(null);
+        setOrg(null);
+        setAuthError(null);
+        return null;
       }
-    },
-    {
-      id: 'usr-partner',
-      name: 'Samir Rao (Partner)',
-      role: 'agent',
-      phone: '+919876543211',
-      badge: 'Operations Partner',
-      permissions: {
-        can_reply: true,
-        can_update_status: true,
-        can_assign: false,
-        can_manage_bots: false,
-        can_view_analytics: true,
-        can_manage_team: false
+
+      const token = await getToken();
+      if (!token) return null;
+      setAuthToken(token);
+
+      const data = await api.getMe();
+      if (data?.user) {
+        setUser(data.user);
+        setOrg(data.org);
+        setAuthError(null);
+        return data;
       }
-    },
-    {
-      id: 'usr-agent',
-      name: 'Jordan Lee (Support Agent)',
-      role: 'agent',
-      phone: '+919876543299',
-      badge: 'Customer Care Specialist',
-      permissions: {
-        can_reply: true,
-        can_update_status: false,
-        can_assign: false,
-        can_manage_bots: false,
-        can_view_analytics: false,
-        can_manage_team: false
-      }
+      return null;
+    } catch (error) {
+      console.warn('[Auth refresh notice]:', error.message);
+      // Keep the Clerk token for authenticated onboarding requests if not onboarded.
+      setUser(null);
+      setOrg(null);
+      setAuthError(error.message || 'Authentication failed.');
+      return null;
     }
-  ];
+  }, [isSignedIn, clerkUser, getToken]);
 
-  // Initialize session verification on load
   useEffect(() => {
-    let mounted = true;
+    if (!isLoaded) return;
 
-    const checkExistingAuth = async () => {
-      setLoading(true);
-      const existingToken = getAuthToken();
+    let cancelled = false;
 
-      if (existingToken) {
-        try {
-          const meData = await api.getMe();
-          if (mounted && meData?.user) {
-            setUser(meData.user);
-            setOrg(meData.org);
-            setToken(existingToken);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn('Existing token expired or invalid:', e.message);
-          setAuthToken(null);
-          setToken(null);
-        }
-      }
-
-      // Check Supabase session
+    const initialize = async () => {
       try {
-        const { data: { session: sbSession } } = await supabase.auth.getSession();
-        if (mounted && sbSession?.user) {
-          setSession(sbSession);
+        if (isSignedIn || clerkUser) {
+          await refresh();
+        } else {
+          setUser(null);
+          setOrg(null);
         }
-      } catch (err) {}
-
-      if (mounted) {
-        setLoading(false);
+      } catch (error) {
+        console.error('[Auth] Refresh failed', error);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    checkExistingAuth();
-
-    // Listen for Supabase auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return;
-      setSession(newSession);
-      if (newSession && !getAuthToken()) {
-        try {
-          const meData = await api.getMe();
-          if (meData?.user) {
-            setUser(meData.user);
-            setOrg(meData.org);
-          }
-        } catch (e) {}
-      }
-    });
+    initialize();
 
     return () => {
-      mounted = false;
-      authListener?.subscription?.unsubscribe();
+      cancelled = true;
     };
-  }, []);
+  }, [isLoaded, isSignedIn, clerkUser?.id, refresh]);
 
-  const login = async (phone, password) => {
+
+  const onboardBusiness = async (businessName) => {
+    const token = await getToken({ skipCache: true });
+    if (!token) throw new Error('Your sign-in session is not ready. Please refresh and try again.');
+    setAuthToken(token);
+    const data = await api.onboardBusiness(businessName);
+    setUser(data.user);
+    setOrg(data.org);
     setAuthError(null);
-    try {
-      const data = await api.login(phone, password);
-      setUser(data.user);
-      setOrg(data.org);
-      setToken(data.token);
-
-      // Set Supabase session if returned
-      if (data.supabaseSession?.access_token) {
-        try {
-          await supabase.auth.setSession({
-            access_token: data.supabaseSession.access_token,
-            refresh_token: data.supabaseSession.refresh_token
-          });
-        } catch (e) { /* non-blocking */ }
-      }
-
-      return data;
-    } catch (err) {
-      setAuthError(err.message);
-      throw err;
-    }
+    return data;
   };
 
-  // Smart OTP: works with both email and phone
-  const sendOtp = async (identifier) => {
+  const completeInvitation = async (inviteCode) => {
+    const token = await getToken({ skipCache: true });
+    if (!token) throw new Error('Your sign-in session is not ready. Please refresh and try again.');
+    setAuthToken(token);
+    const data = await api.completeInvitation(inviteCode);
+    setUser(data.user);
+    setOrg(data.org);
     setAuthError(null);
-    try {
-      return await api.sendOtp(identifier);
-    } catch (err) {
-      setAuthError(err.message);
-      throw err;
-    }
-  };
-
-  const verifyOtp = async (identifier, tokenCode) => {
-    setAuthError(null);
-    try {
-      const data = await api.verifyOtp(identifier, tokenCode);
-      setUser(data.user);
-      setOrg(data.org);
-      setToken(data.token);
-
-      // Set Supabase session if returned (email OTP flow)
-      if (data.supabaseSession?.access_token) {
-        try {
-          await supabase.auth.setSession({
-            access_token: data.supabaseSession.access_token,
-            refresh_token: data.supabaseSession.refresh_token
-          });
-        } catch (e) { /* non-blocking */ }
-      }
-
-      return data;
-    } catch (err) {
-      setAuthError(err.message);
-      throw err;
-    }
-  };
-
-  const register = async (payload) => {
-    setAuthError(null);
-    try {
-      const data = await api.register(payload);
-      setUser(data.user);
-      setOrg(data.org);
-      setToken(data.token);
-      return data;
-    } catch (err) {
-      setAuthError(err.message);
-      throw err;
-    }
-  };
-
-  const acceptInvite = async (payload) => {
-    setAuthError(null);
-    try {
-      const data = await api.acceptInvite(payload);
-      setUser(data.user);
-      setOrg(data.org);
-      setToken(data.token);
-      return data;
-    } catch (err) {
-      setAuthError(err.message);
-      throw err;
-    }
+    return data;
   };
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {}
     setAuthToken(null);
-    setToken(null);
     setUser(null);
     setOrg(null);
-    setSession(null);
     setIsProfileOpen(false);
+    await clerkSignOut();
   };
 
-  const switchPersona = (personaId) => {
-    const target = personas.find(p => p.id === personaId);
-    if (!target) return;
-
-    setUser(prev => ({
-      ...prev,
-      name: target.name,
-      role: target.role,
-      phone: target.phone,
-      permissions: target.permissions
-    }));
-  };
-
-  // RBAC Permission checking helper
-  const can = (permissionKey) => {
-    if (!user) return false;
-    if (user.role === 'owner') return true;
-    return Boolean(user.permissions && user.permissions[permissionKey]);
-  };
+  const can = (key) =>
+    user?.role === 'owner' || Boolean(user?.permissions?.[key]);
 
   return (
     <AuthContext.Provider
       value={{
-        session,
         user,
         org,
-        token,
+        clerkUser,
         loading,
         authError,
         isProfileOpen,
         setIsProfileOpen,
-        login,
-        sendOtp,
-        verifyOtp,
-        register,
-        acceptInvite,
+        refresh,
+        onboardBusiness,
+        completeInvitation,
         signOut,
-        personas,
-        switchPersona,
-        can
+        can,
       }}
     >
       {children}

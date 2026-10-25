@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { supabase } from '../services/supabaseClient';
 import { useAuth } from './AuthContext';
 import confetti from 'canvas-confetti';
 
 const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
 
   const [complaints, setComplaints] = useState([]);
   const [selectedComplaintId, setSelectedComplaintId] = useState(null);
@@ -72,7 +71,7 @@ export const DataProvider = ({ children }) => {
 
   // Fetch real data from backend API
   const refreshAll = async () => {
-    if (!token) return;
+    if (!user) return;
     try {
       const [complaintsData, botsData, teamData, subData] = await Promise.allSettled([
         api.getComplaints(),
@@ -100,7 +99,8 @@ export const DataProvider = ({ children }) => {
 
   // Polling for live incoming Telegram messages
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
+
     refreshAll();
 
     const interval = setInterval(() => {
@@ -108,33 +108,8 @@ export const DataProvider = ({ children }) => {
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [token]);
+  }, [user]);
 
-  // Supabase Realtime Subscription for instant message updates
-  useEffect(() => {
-    if (!token) return;
-
-    let channel = null;
-    try {
-      channel = supabase
-        .channel('public:realtime_feed')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => {
-          refreshAll();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'complaint_messages' }, () => {
-          refreshAll();
-        })
-        .subscribe();
-    } catch (e) {
-      console.warn('Supabase Realtime subscription note:', e.message);
-    }
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [token]);
 
   const selectedComplaint = complaints.find(c => c.id === selectedComplaintId) || null;
 

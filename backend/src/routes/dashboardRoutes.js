@@ -9,11 +9,9 @@ router.use(authMiddleware);
  * GET /api/dashboard/stats
  * Primary metrics for the dashboard summary cards
  */
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   const orgId = req.org.id;
-  const complaints = store.getComplaints(orgId);
-  const bots = store.getBotsByOrg(orgId);
-  const members = store.getUsersByOrg(orgId);
+  const [complaints, bots, members] = await Promise.all([store.getComplaints(orgId), store.getBotsByOrg(orgId), store.getUsersByOrg(orgId)]);
 
   const total = complaints.length;
   const pending = complaints.filter(c => c.status === 'pending').length;
@@ -47,9 +45,9 @@ router.get('/stats', (req, res) => {
  * GET /api/dashboard/categories
  * Category-wise distribution of complaints (Product, Delivery, Billing, Service, Other)
  */
-router.get('/categories', (req, res) => {
+router.get('/categories', async (req, res) => {
   const orgId = req.org.id;
-  const complaints = store.getComplaints(orgId);
+  const complaints = await store.getComplaints(orgId);
   const total = complaints.length;
 
   const categories = ['product', 'delivery', 'billing', 'service', 'other'];
@@ -75,9 +73,9 @@ router.get('/categories', (req, res) => {
  * GET /api/dashboard/trends
  * Volume trends over the past 7 days
  */
-router.get('/trends', (req, res) => {
+router.get('/trends', async (req, res) => {
   const orgId = req.org.id;
-  const complaints = store.getComplaints(orgId);
+  const complaints = await store.getComplaints(orgId);
 
   // Group by day for the last 7 days
   const days = {};

@@ -1,16 +1,27 @@
 ﻿-- ==============================================================================
--- ResolveDesk: Multi-Tenant Telegram Complaint SaaS Database Schema
+-- ResolveDesk: clean Supabase application-data reset for Clerk authentication.
+-- WARNING: this removes ALL ResolveDesk application records. It does NOT touch
+-- auth.users because Supabase Auth is no longer used by this project.
+-- Run this only when you want the clean production baseline requested.
 -- Run this in your Supabase SQL Editor:
 -- Dashboard -> SQL Editor -> New query -> Paste & Run
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS uuid-ossp;
 
+DROP TABLE IF EXISTS complaint_messages CASCADE;
+DROP TABLE IF EXISTS complaints CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS bots CASCADE;
+DROP TABLE IF EXISTS invitations CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS organizations CASCADE;
+
 -- 1. Organizations
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
-    phone VARCHAR(32) NOT NULL,
+    phone VARCHAR(32),
     subscription_tier VARCHAR(50) NOT NULL DEFAULT 'starter',
     max_bots INT NOT NULL DEFAULT 1,
     max_members INT NOT NULL DEFAULT 3,
@@ -26,8 +37,10 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    phone VARCHAR(32) NOT NULL,
-    password_hash VARCHAR(255),
+    -- Clerk is the authentication authority. This is its immutable user ID.
+    clerk_user_id TEXT NOT NULL UNIQUE,
+    email TEXT,
+    phone VARCHAR(32),
     role VARCHAR(50) NOT NULL DEFAULT 'agent',
     permissions JSONB NOT NULL DEFAULT '{
         can_reply: true,
@@ -39,11 +52,12 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_user_phone_org UNIQUE(phone, org_id)
+    CONSTRAINT uq_user_email_org UNIQUE(email, org_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_clerk_user_id ON users(clerk_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- 3. Bots (Linked Telegram Bots)
 CREATE TABLE IF NOT EXISTS bots (
@@ -121,24 +135,29 @@ CREATE INDEX IF NOT EXISTS idx_messages_complaint ON complaint_messages(complain
 CREATE TABLE IF NOT EXISTS invitations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    phone VARCHAR(32) NOT NULL,
+    email TEXT NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'agent',
     permissions JSONB NOT NULL,
     invite_code VARCHAR(64) NOT NULL UNIQUE,
+    clerk_invitation_id TEXT UNIQUE,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    accepted_by_clerk_user_id TEXT,
+    accepted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days')
 );
 
 CREATE INDEX IF NOT EXISTS idx_invitations_org ON invitations(org_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_code ON invitations(invite_code);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
 
--- 8. GRANT FULL PERMISSIONS TO API ROLES (Required for Supabase Service Role and Anon)
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+-- The browser never queries these tables. The API uses the Supabase service role.
+-- Keeping RLS enabled and granting no anonymous access prevents cross-tenant leaks.
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE complaint_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;

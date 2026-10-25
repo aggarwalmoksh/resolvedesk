@@ -4,13 +4,13 @@ import { store } from '../db/store.js';
  * Quota & Subscription Limit Enforcement Middleware
  */
 
-export function checkBotQuota(req, res, next) {
+export async function checkBotQuota(req, res, next) {
   const org = req.org;
   if (!org) {
     return res.status(400).json({ error: 'Organization context missing' });
   }
 
-  const currentBots = store.getBotsByOrg(org.id);
+  const currentBots = await store.getBotsByOrg(org.id);
   if (currentBots.length >= org.max_bots) {
     return res.status(403).json({
       error: 'Bot limit reached for your current subscription plan.',
@@ -24,14 +24,14 @@ export function checkBotQuota(req, res, next) {
   next();
 }
 
-export function checkMemberQuota(req, res, next) {
+export async function checkMemberQuota(req, res, next) {
   const org = req.org;
   if (!org) {
     return res.status(400).json({ error: 'Organization context missing' });
   }
 
-  const activeUsers = store.getUsersByOrg(org.id);
-  const pendingInvites = store.getInvitationsByOrg(org.id);
+  const activeUsers = await store.getUsersByOrg(org.id);
+  const pendingInvites = await store.getInvitationsByOrg(org.id);
   const totalSlotsUsed = activeUsers.length + pendingInvites.length;
 
   if (totalSlotsUsed >= org.max_members) {

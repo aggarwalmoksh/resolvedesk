@@ -11,13 +11,13 @@ router.use(authMiddleware);
  * GET /api/subscription
  * Get current subscription status and usage quotas
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const org = req.org;
-  const allBots = store.getBotsByOrg(org.id);
+  const allBots = await store.getBotsByOrg(org.id);
   const activeBots = allBots.filter(b => b.status === 'active');
   const pausedBots = allBots.filter(b => b.status === 'paused' || b.status === 'suspended');
-  const currentMembers = store.getUsersByOrg(org.id);
-  const pendingInvites = store.getInvitationsByOrg(org.id);
+  const currentMembers = await store.getUsersByOrg(org.id);
+  const pendingInvites = await store.getInvitationsByOrg(org.id);
   const planInfo = PLANS[org.subscription_tier] || PLANS.starter;
 
   res.json({
@@ -72,7 +72,7 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
     }
 
     const currentOrg = req.org;
-    const currentBots = store.getBotsByOrg(currentOrg.id);
+    const currentBots = await store.getBotsByOrg(currentOrg.id);
 
     let botsPaused = 0;
     let botsReactivated = 0;
@@ -84,11 +84,11 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
         const b = currentBots[i];
         if (i < targetPlan.max_bots) {
           if (b.status !== 'active') {
-            store.updateBot(b.id, { status: 'active' });
+            await store.updateBot(b.id, { status: 'active' });
           }
         } else {
           if (b.status !== 'paused') {
-            store.updateBot(b.id, { status: 'paused' });
+            await store.updateBot(b.id, { status: 'paused' });
             botsPaused++;
             try {
               await deleteBotWebhook(b.bot_token);
@@ -106,7 +106,7 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
 
       for (const b of pausedBots) {
         if (availableSlots > 0) {
-          store.updateBot(b.id, { status: 'active' });
+          await store.updateBot(b.id, { status: 'active' });
           availableSlots--;
           botsReactivated++;
           try {
@@ -122,7 +122,7 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
     }
 
     // 2. Update Organization plan and limits
-    const updatedOrg = store.updateOrg(req.org.id, {
+    const updatedOrg = await store.updateOrg(req.org.id, {
       subscription_tier: targetPlan.id,
       max_bots: targetPlan.max_bots,
       max_members: targetPlan.max_members
