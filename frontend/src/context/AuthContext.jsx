@@ -20,6 +20,15 @@ export const AuthProvider = ({ children }) => {
 
   const { user: clerkUser } = useUser();
 
+  useEffect(() => {
+    console.log('[Clerk diagnostic]', {
+      isLoaded,
+      isSignedIn,
+      hasClerkUser: Boolean(clerkUser),
+    });
+  }, [isLoaded, isSignedIn, clerkUser]);
+
+
   const [user, setUser] = useState(null);
   const [org, setOrg] = useState(null);
   const [loading, setLoading] = useState(true);
