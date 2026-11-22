@@ -1,6 +1,6 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/authMiddleware.js';
-import { requirePermission } from '../middleware/rbacMiddleware.js';
+import { complaintAssigneeScope, requirePermission } from '../middleware/rbacMiddleware.js';
 import { store } from '../db/store.js';
 import { replyToComplaint } from '../services/complaintService.js';
 
@@ -20,7 +20,7 @@ router.get('/', async (req, res, next) => {
   const complaints = await store.getComplaints(req.org.id, {
     status,
     category,
-    assigned_to,
+    assigned_to: complaintAssigneeScope(req.user) || assigned_to,
     bot_id,
     search
   });
@@ -32,8 +32,9 @@ router.get('/', async (req, res, next) => {
     const bot = c.bots || await store.getBotById(c.bot_id);
     const messages = await store.getMessagesByComplaint(c.id);
 
+    const { customers, bots, ...fields } = c;
     return {
-      ...c,
+      ...fields,
       customer: customer ? {
         id: customer.id,
         name: [customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.username || 'Customer',
@@ -66,7 +67,7 @@ router.get('/', async (req, res, next) => {
  * Get full complaint detail, customer info, and message thread
  */
 router.get('/:id', async (req, res) => {
-  const complaint = await store.getComplaintById(req.params.id, req.org.id);
+  const complaint = await store.getComplaintById(req.params.id, req.org.id, complaintAssigneeScope(req.user));
   if (!complaint) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
@@ -76,10 +77,11 @@ router.get('/:id', async (req, res) => {
   const bot = complaint.bots || await store.getBotById(complaint.bot_id);
   const messages = await store.getMessagesByComplaint(complaint.id);
 
+  const { customers, bots, ...fields } = complaint;
   res.json({
     status: 'success',
     data: {
-      ...complaint,
+      ...fields,
       customer: customer ? {
         id: customer.id,
         name: [customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.username || 'Customer',
@@ -114,7 +116,7 @@ router.patch('/:id/status', requirePermission('can_update_status'), async (req, 
     return res.status(400).json({ error: `Invalid status. Must be one of: ${allowed.join(', ')}` });
   }
 
-  const updated = await store.updateComplaint(req.params.id, { status }, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, { status }, req.org.id, complaintAssigneeScope(req.user));
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
@@ -151,7 +153,7 @@ router.patch('/:id/assign', requirePermission('can_assign'), async (req, res) =>
     assigneeName = assignee.name;
   }
 
-  const updated = await store.updateComplaint(req.params.id, { assigned_to: assigned_to || null }, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, { assigned_to: assigned_to || null }, req.org.id, complaintAssigneeScope(req.user));
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }
@@ -196,7 +198,7 @@ router.patch('/:id/category', async (req, res) => {
     updates.priority = priority;
   }
 
-  const updated = await store.updateComplaint(req.params.id, updates, req.org.id);
+  const updated = await store.updateComplaint(req.params.id, updates, req.org.id, complaintAssigneeScope(req.user));
   if (!updated) {
     return res.status(404).json({ error: 'Complaint not found' });
   }

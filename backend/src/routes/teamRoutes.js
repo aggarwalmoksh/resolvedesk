@@ -1,9 +1,10 @@
 import express from 'express';
 import { clerkClient } from '@clerk/express';
 import { authMiddleware, sanitizeUser } from '../middleware/authMiddleware.js';
-import { requirePermission } from '../middleware/rbacMiddleware.js';
+import { requirePermission, requireRole } from '../middleware/rbacMiddleware.js';
 import { store, DEFAULT_PERMISSIONS } from '../db/store.js';
 import { FRONTEND_URL } from '../config.js';
+import { canEditMemberPermissions, isMemberPermissionPatch } from '../../../shared/memberPermissions.js';
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.use(authMiddleware);
 router.get('/', async (req, res, next) => {
   try {
     const [members, invitations] = await Promise.all([store.getUsersByOrg(req.org.id), store.getInvitationsByOrg(req.org.id)]);
-    res.json({ status: 'success', data: { members: members.map(sanitizeUser), invitations, quota: { used: members.length + invitations.length, max: req.org.max_members } } });
+    res.json({ status: 'success', data: { members: members.map(sanitizeUser), invitations: ['owner', 'admin'].includes(req.user.role) ? invitations : invitations.map(({ id, email, role }) => ({ id, email, role })), quota: { used: members.length + invitations.length, max: req.org.max_members } } });
   } catch (error) { next(error); }
 });
 
@@ -29,29 +30,84 @@ router.post('/invite', requirePermission('can_manage_team'), async (req, res, ne
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const role = ['admin', 'agent'].includes(req.body.role) ? req.body.role : 'agent';
+    if (role === 'admin' && req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can invite admins.' });
+    }
+    const overrides = req.body.permissions ?? {};
+    if (!isMemberPermissionPatch(overrides)) {
+      return res.status(400).json({ error: 'Permissions must use supported keys and boolean values.' });
+    }
+    if (Object.keys(overrides).length && !['owner', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only owners and admins can configure permissions.' });
+    }
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'A valid email address is required.' });
     const [members, invitations, existing] = await Promise.all([store.getUsersByOrg(req.org.id), store.getInvitationsByOrg(req.org.id), store.getUserByEmail(email, req.org.id)]);
-    if (members.length + invitations.length >= req.org.max_members) return res.status(403).json({ error: 'Team member limit reached for this plan.' });
+    const pending = invitations.find(invite => invite.email === email);
+    if (!pending && members.length + invitations.length >= req.org.max_members) return res.status(403).json({ error: 'Team member limit reached for this plan.' });
     if (existing) return res.status(409).json({ error: 'This person is already a member of your organization.' });
-    const permissions = { ...(DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.agent), ...(req.body.permissions || {}) };
-    const invitation = await store.createInvitation({ org_id: req.org.id, email, role, permissions });
-    const redirectUrl = `${(FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')}/?invite=${encodeURIComponent(invitation.invite_code)}`;
-    const clerkInvitation = await clerkClient.invitations.createInvitation({ emailAddress: email, redirectUrl, publicMetadata: { resolveDeskInviteCode: invitation.invite_code } });
-    await store.updateInvitation(invitation.id, { clerk_invitation_id: clerkInvitation.id });
-    res.status(201).json({ status: 'success', message: `Invitation email sent to ${email}.`, data: { invitation: { ...invitation, clerk_invitation_id: clerkInvitation.id }, email_sent: true } });
+    const permissions = { ...(DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.agent), ...overrides };
+    if (pending?.role === 'admin' && req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can resend admin invitations.' });
+    }
+
+    const invitation = pending || await store.createInvitation({ org_id: req.org.id, email, role, permissions });
+    const redirectUrl = new URL('/app/sign-up', FRONTEND_URL || 'http://localhost:5173');
+    redirectUrl.searchParams.set('invite', invitation.invite_code);
+    try {
+      const sent = await clerkClient.invitations.createInvitation({
+        emailAddress: email,
+        redirectUrl: redirectUrl.href,
+        notify: true,
+        ignoreExisting: true,
+        expiresInDays: 7,
+      });
+      await store.updateInvitation(invitation.id, { clerk_invitation_id: sent.id });
+      res.status(pending ? 200 : 201).json({ status: 'success', data: { invitation, email_sent: true } });
+    } catch (error) {
+      const reason = error.errors?.[0]?.longMessage || error.errors?.[0]?.message || error.message;
+      console.warn('Invitation email failed:', reason);
+      res.status(502).json({ error: `Invitation saved, but the email could not be sent. ${reason}` });
+    }
   } catch (error) { next(error); }
 });
 
-router.patch('/members/:id/permissions', requirePermission('can_manage_team'), async (req, res, next) => {
+router.delete('/invitations/:id', requireRole(['admin']), async (req, res, next) => {
+  try {
+    const invitation = await store.transitionInvitation(req.params.id, req.org.id, 'pending', { status: 'revoked' });
+    if (!invitation) return res.status(404).json({ error: 'Pending invitation not found.' });
+
+    if (invitation.clerk_invitation_id) {
+      try {
+        await clerkClient.invitations.revokeInvitation(invitation.clerk_invitation_id);
+      } catch (error) {
+        console.warn('Clerk invitation revocation failed:', error.message);
+      }
+    }
+    res.json({ status: 'success', data: { id: invitation.id } });
+  } catch (error) { next(error); }
+});
+
+router.patch('/members/:id/permissions', requireRole(['admin']), async (req, res, next) => {
   try {
     const member = await store.getUserById(req.params.id);
     if (!member || member.org_id !== req.org.id) return res.status(404).json({ error: 'Member not found.' });
-    if (member.role === 'owner' && member.id !== req.user.id) return res.status(403).json({ error: 'The organization owner cannot be modified.' });
-    const role = ['admin', 'agent'].includes(req.body.role) ? req.body.role : member.role;
-    const incomingPerms = (req.body && req.body.permissions !== undefined) ? req.body.permissions : req.body;
-    const { role: _role, ...safePerms } = (typeof incomingPerms === 'object' && incomingPerms !== null) ? incomingPerms : {};
-    const updatedPerms = { ...member.permissions, ...safePerms };
-    const updated = await store.updateUser(member.id, { role, permissions: updatedPerms });
+    if (!canEditMemberPermissions(req.user, member)) {
+      return res.status(403).json({ error: 'You cannot edit permissions for this member.' });
+    }
+
+    const { role, permissions, ...flatPermissions } = req.body ?? {};
+    const changes = permissions === undefined ? flatPermissions : permissions;
+    if (!isMemberPermissionPatch(changes) || (role !== undefined && !['admin', 'agent'].includes(role))) {
+      return res.status(400).json({ error: 'Enter a valid role and supported boolean permissions.' });
+    }
+    if (role !== undefined && req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can change roles.' });
+    }
+
+    const updated = await store.updateUser(member.id, {
+      ...(role === undefined ? {} : { role }),
+      permissions: { ...member.permissions, ...changes },
+    });
     res.json({ status: 'success', data: sanitizeUser(updated) });
   } catch (error) { next(error); }
 });

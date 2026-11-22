@@ -24,6 +24,7 @@ router.get('/', async (req, res) => {
     status: 'success',
     data: {
       plan: planInfo,
+      billing_period: org.billing_period || 'monthly',
       usage: {
         bots: {
           current: allBots.length,
@@ -62,8 +63,8 @@ router.get('/plans', (req, res) => {
  */
 router.post('/upgrade', requireRole(['owner']), async (req, res) => {
   try {
-    const { plan_id } = req.body;
-    const targetPlan = PLANS[plan_id];
+    const { plan_id, billing_period = 'monthly' } = req.body;
+    const targetPlan = Object.hasOwn(PLANS, plan_id) ? PLANS[plan_id] : null;
 
     if (!targetPlan) {
       return res.status(400).json({
@@ -71,7 +72,32 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
       });
     }
 
+    if (billing_period !== 'monthly' && (billing_period !== 'annual' || targetPlan.id !== 'growth')) {
+      return res.status(400).json({ error: 'Annual billing is available for Growth.' });
+    }
+
     const currentOrg = req.org;
+    const samePlan = currentOrg.subscription_tier === targetPlan.id &&
+      currentOrg.max_bots === targetPlan.max_bots && currentOrg.max_members === targetPlan.max_members;
+    const planUpdates = {
+      subscription_tier: targetPlan.id,
+      max_bots: targetPlan.max_bots,
+      max_members: targetPlan.max_members,
+    };
+
+    let updatedOrg;
+    try {
+      updatedOrg = await store.updateOrg(currentOrg.id, { ...planUpdates, billing_period });
+    } catch (err) {
+      if (err.code !== 'PGRST204' || !err.message.includes('billing_period')) throw err;
+      if (billing_period === 'annual') {
+        return res.status(503).json({ error: 'Annual billing requires the billing-period database migration.' });
+      }
+      updatedOrg = await store.updateOrg(currentOrg.id, planUpdates);
+    }
+    if (samePlan) {
+      return res.json({ status: 'success', message: 'Billing period updated.', data: { org: updatedOrg } });
+    }
     const currentBots = await store.getBotsByOrg(currentOrg.id);
 
     let botsPaused = 0;
@@ -126,13 +152,6 @@ router.post('/upgrade', requireRole(['owner']), async (req, res) => {
         }
       }
     }
-
-    // 2. Update Organization plan and limits
-    const updatedOrg = await store.updateOrg(req.org.id, {
-      subscription_tier: targetPlan.id,
-      max_bots: targetPlan.max_bots,
-      max_members: targetPlan.max_members
-    });
 
     let message = `Subscription successfully changed to ${targetPlan.name}!`;
     if (botsPaused > 0) {

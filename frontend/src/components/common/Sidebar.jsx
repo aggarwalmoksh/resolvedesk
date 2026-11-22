@@ -1,142 +1,130 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Inbox, 
-  Users, 
-  Bot, 
-  CreditCard, 
-  ArrowUpRight
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import {
+  LayoutDashboard, Inbox, Users, Bot, CreditCard, Settings,
 } from 'lucide-react';
-import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
+import { cn } from '../../lib/cn';
+import { Avatar } from '../../ui/primitives';
+
+const NAV_ITEMS = [
+  { id: 'dashboard', path: '/app',         icon: LayoutDashboard, label: 'Dashboard' },
+  { id: 'inbox',     path: '/app/inbox',   icon: Inbox,           label: 'Inbox' },
+  { id: 'team',      path: '/app/team',    icon: Users,           label: 'Team' },
+  { id: 'bots',      path: '/app/bots',    icon: Bot,             label: 'Bots' },
+  { id: 'billing',   path: '/app/billing', icon: CreditCard,      label: 'Billing' },
+  { id: 'profile',   path: '/app/profile', icon: Settings,        label: 'Settings' },
+];
 
 export const Sidebar = ({ activeTab, setActiveTab }) => {
-  const { stats, subscription } = useData();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
-  const navItems = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      badge: null,
-      tourId: 'tour-nav-dashboard'
-    },
-    {
-      id: 'complaints',
-      label: 'Complaints Stack',
-      icon: Inbox,
-      badge: stats.pending > 0 ? stats.pending : null,
-      badgeColor: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60',
-      tourId: 'tour-nav-complaints'
-    },
-    {
-      id: 'team',
-      label: 'Roles & Permissions',
-      icon: Users,
-      badge: `${stats.team_count}/${stats.max_members}`,
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
-      tourId: 'tour-nav-team'
-    },
-    {
-      id: 'bots',
-      label: 'Telegram Bots',
-      icon: Bot,
-      badge: `${stats.active_bots}/${stats.max_bots}`,
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
-      tourId: 'tour-nav-bots'
-    },
-    {
-      id: 'subscription',
-      label: 'Subscription Tier',
-      icon: CreditCard,
-      badge: 'Upgrade',
-      badgeColor: 'bg-[#A0BDDB]/30 dark:bg-[#A0BDDB]/20 text-[#203F64] dark:text-[#A0BDDB] border-[#A0BDDB]/50 dark:border-[#A0BDDB]/40',
-      tourId: 'tour-nav-subscription'
-    }
-  ];
+  const handleNav = (item) => {
+    setActiveTab(item.id);
+    navigate(item.path);
+  };
 
   return (
-    <aside className="w-full md:w-64 flex-shrink-0 flex flex-col justify-between py-6 px-4 bg-white dark:bg-[#0F172B] rounded-3xl border border-slate-200 dark:border-slate-800 md:min-h-[calc(100vh-6rem)] shadow-sm transition-colors">
-      <div className="space-y-6">
-        {/* Navigation Section */}
-        <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 mb-3 block">
-            Command Center
-          </span>
-
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  id={item.tourId}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-semibold transition-all duration-200 ${
-                    isActive
-                      ? 'bg-[#A0BDDB]/20 dark:bg-[#A0BDDB]/15 text-[#203F64] dark:text-[#A0BDDB] border border-[#A0BDDB]/50 dark:border-[#A0BDDB]/30 font-bold'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-transparent'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-[#2B5484] dark:text-[#A0BDDB]' : 'text-slate-400 dark:text-slate-500'}`} />
-                    <span>{item.label}</span>
-                  </div>
-
-                  {item.badge && (
-                    <span 
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                        item.badgeColor || 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
-
-      {/* Bottom Subscription Status Card */}
-      <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
-            <span>{subscription?.plan?.name || 'Starter Plan'}</span>
-            <span className="font-mono text-[#2B5484] dark:text-[#A0BDDB] font-bold">
-              ₹{subscription?.plan?.price_monthly || 399}/mo
+    <>
+      {/* Desktop sidebar */}
+      <aside
+        className="hidden md:flex flex-col w-[220px] lg:w-[240px] border-r border-border-default bg-surface-1 shrink-0"
+        role="navigation"
+        aria-label="Main navigation"
+      >
+        {/* Logo */}
+        <div className="px-5 h-16 flex items-center border-b border-border-default">
+          <a href="/app" className="flex items-center gap-2.5 group">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-white text-xs font-semibold shadow-xs">
+              R
+            </div>
+            <span className="text-base font-semibold text-text-primary tracking-tight">
+              ResolveDesk
             </span>
-          </div>
+          </a>
+        </div>
 
-          {/* Progress bar for bots */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span>Bots Connected</span>
-              <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
-                {stats.active_bots} / {stats.max_bots}
-              </span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-[#A0BDDB] rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (stats.active_bots / stats.max_bots) * 100)}%` }}
-              />
-            </div>
-          </div>
+        {/* Nav items */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <motion.button
+                key={item.id}
+                type="button"
+                onClick={() => handleNav(item)}
+                className={cn(
+                  'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors',
+                  isActive
+                    ? 'text-brand-600 dark:text-brand-300 bg-brand-50/70 dark:bg-brand-900/20 font-semibold'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
+                )}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              >
+                <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                <span>{item.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-active"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-brand-500"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+              </motion.button>
+            );
+          })}
+        </nav>
 
+        {/* User mini */}
+        <div className="px-3 pb-4 pt-2 border-t border-border-default">
           <button
-            onClick={() => setActiveTab('subscription')}
-            className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+            type="button"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm hover:bg-surface-2 transition-colors text-left"
+            onClick={() => handleNav(NAV_ITEMS[5])}
           >
-            <span>Manage Plan</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <Avatar size="sm" name={user?.name || user?.email || 'U'} />
+            <span className="text-xs text-text-secondary truncate">
+              {user?.name || user?.email?.split('@')[0] || 'User'}
+            </span>
           </button>
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {/* Mobile bottom tab bar */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface-1/95 backdrop-blur-md px-2 pb-safe-b"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 4px)' }}
+        role="navigation"
+        aria-label="Mobile navigation"
+      >
+        <div className="flex items-center justify-around h-14">
+          {NAV_ITEMS.slice(0, 5).map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <motion.button
+                key={item.id}
+                type="button"
+                onClick={() => handleNav(item)}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-0.5 min-w-[48px] min-h-[44px] rounded-lg transition-colors',
+                  isActive
+                    ? 'text-brand-600 dark:text-brand-300 font-medium'
+                    : 'text-text-tertiary'
+                )}
+                whileTap={{ scale: 0.92 }}
+              >
+                <Icon className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+                <span className="text-[10px]">{item.label}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 };

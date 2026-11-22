@@ -1,12 +1,28 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../services/api';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useOptimistic,
+  useRef,
+  useState,
+  startTransition,
+} from 'react';
+import { PLAN_CATALOG } from '../../../shared/plans';
+import { api, createIdempotencyKey } from '../services/api';
 import { useAuth } from './AuthContext';
-import confetti from 'canvas-confetti';
+import { useToast } from '../ui/SileoToast';
 
 const DataContext = createContext();
+export function DataProvider({ children }) {
+  const { user, org } = useAuth();
+  const scope = JSON.stringify([org?.id, user?.id, user?.role]);
+  return <ScopedDataProvider key={scope}>{children}</ScopedDataProvider>;
+}
 
-export const DataProvider = ({ children }) => {
-  const { user } = useAuth();
+function ScopedDataProvider({ children }) {
+  const { user, syncMemberPermissions } = useAuth();
+  const { showToast, showUndo } = useToast();
 
   const [complaints, setComplaints] = useState([]);
   const [selectedComplaintId, setSelectedComplaintId] = useState(null);
@@ -14,36 +30,62 @@ export const DataProvider = ({ children }) => {
   const [team, setTeam] = useState({
     members: [],
     invitations: [],
-    quota: { current: 0, max: 3, remaining: 3 }
+    quota: { current: 0, max: 3, remaining: 3 },
   });
   const [subscription, setSubscription] = useState({
-    plan: {
-      id: 'starter',
-      name: 'Starter Plan',
-      currency: '₹',
-      price_monthly: 399,
-      max_bots: 1,
-      max_members: 3,
-      description: 'Essential support for small businesses managing their first Telegram bot.'
-    },
+    plan: PLAN_CATALOG[0],
     usage: {
       bots: { current: 0, max: 1, available: 1 },
-      team_members: { current: 1, max: 3, available: 2 }
-    }
+      team_members: { current: 1, max: 2, available: 1 },
+    },
   });
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [complaintError, setComplaintError] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const inFlight = useRef(new Set());
+  const refreshVersion = useRef(0);
 
-  const showToast = (message, type = 'success') => {
-    setToast({ id: Date.now(), message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
+  const [optimisticComplaints, applyComplaint] = useOptimistic(
+    complaints,
+    (state, action) => {
+      if (action.type === 'status') {
+        return state.map((c) => (c.id === action.id ? { ...c, status: action.status } : c));
+      }
+      if (action.type === 'assign') {
+        return state.map((c) =>
+          c.id === action.id
+            ? { ...c, assigned_to: action.assigned_to, assignee: action.assignee }
+            : c
+        );
+      }
+      if (action.type === 'reply') {
+        return state.map((c) =>
+          c.id === action.id
+            ? { ...c, messages: [...(c.messages || []), action.message], status: c.status === 'pending' ? 'in_progress' : c.status }
+            : c
+        );
+      }
+      return state;
+    }
+  );
 
-  // Compute stats in real-time
-  const total = complaints.length;
-  const pending = complaints.filter(c => c.status === 'pending').length;
-  const in_progress = complaints.filter(c => c.status === 'in_progress').length;
-  const closed = complaints.filter(c => c.status === 'closed' || c.status === 'resolved').length;
+  const [optimisticTeam, applyTeam] = useOptimistic(team, (state, action) => {
+    if (action.type === 'remove') {
+      return { ...state, members: state.members.filter((m) => m.id !== action.id) };
+    }
+    return state;
+  });
+
+  const [optimisticBots, applyBots] = useOptimistic(bots, (state, action) => {
+    if (action.type === 'remove') return state.filter((b) => b.id !== action.id);
+    if (action.type === 'restore') return [...state, action.bot].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    return state;
+  });
+
+  const total = optimisticComplaints.length;
+  const pending = optimisticComplaints.filter((c) => c.status === 'pending').length;
+  const in_progress = optimisticComplaints.filter((c) => c.status === 'in_progress').length;
+  const closed = optimisticComplaints.filter((c) => c.status === 'closed' || c.status === 'resolved').length;
   const resolution_rate_percent = total > 0 ? Math.round((closed / total) * 100) : 0;
 
   const stats = {
@@ -52,34 +94,32 @@ export const DataProvider = ({ children }) => {
     in_progress,
     closed,
     resolution_rate_percent,
-    active_bots: bots.length,
+    active_bots: optimisticBots.length,
     max_bots: subscription?.plan?.max_bots || 1,
-    team_count: team.members.length || 1,
-    max_members: subscription?.plan?.max_members || 3
+    team_count: optimisticTeam.members.length || 1,
+    max_members: subscription?.plan?.max_members || 3,
   };
 
-  // Category breakdown
   const categoriesList = ['product', 'delivery', 'billing', 'service', 'other'];
-  const categoriesBreakdown = categoriesList.map(cat => {
-    const count = complaints.filter(c => c.category === cat).length;
-    return {
-      category: cat,
-      count,
-      percent: total > 0 ? Math.round((count / total) * 100) : 0
-    };
+  const categoriesBreakdown = categoriesList.map((cat) => {
+    const count = optimisticComplaints.filter((c) => c.category === cat).length;
+    return { category: cat, count, percent: total > 0 ? Math.round((count / total) * 100) : 0 };
   });
 
-  // Fetch real data from backend API
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async ({ background = false } = {}) => {
     if (!user) return;
+    const version = ++refreshVersion.current;
+    if (!background) setLoading(true);
     try {
       const [complaintsData, botsData, teamData, subData] = await Promise.allSettled([
         api.getComplaints(),
         api.getBots(),
         api.getTeam(),
-        api.getSubscription()
+        api.getSubscription(),
       ]);
 
+      if (version !== refreshVersion.current) return;
+      setComplaintError(complaintsData.status === 'rejected');
       if (complaintsData.status === 'fulfilled' && Array.isArray(complaintsData.value)) {
         setComplaints(complaintsData.value);
       }
@@ -88,193 +128,228 @@ export const DataProvider = ({ children }) => {
       }
       if (teamData.status === 'fulfilled' && teamData.value) {
         setTeam(teamData.value);
+        const currentMember = teamData.value.members.find(member => member.id === user.id);
+        if (currentMember) syncMemberPermissions(currentMember);
       }
       if (subData.status === 'fulfilled' && subData.value) {
         setSubscription(subData.value);
       }
-    } catch (e) {
-      console.warn('Backend sync note:', e.message);
+    } finally {
+      if (version === refreshVersion.current) {
+        setLoading(false);
+        setHydrated(true);
+      }
     }
-  };
+  }, [user?.id, syncMemberPermissions]);
 
-  // Polling for live incoming Telegram messages
   useEffect(() => {
-    if (!user) return;
-
+    if (!user) return undefined;
     refreshAll();
 
-    const interval = setInterval(() => {
-      refreshAll();
-    }, 4000);
+    const onFocus = () => refreshAll({ background: true });
+    const onOnline = () => refreshAll({ background: true });
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshAll({ background: true });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
-    return () => clearInterval(interval);
-  }, [user]);
+    const interval = window.setInterval(() => refreshAll({ background: true }), 12000);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refreshAll]);
 
+  const fetchComplaintDetails = useCallback(async (id) => {
+    if (!id) return null;
+    try {
+      const detailed = await api.getComplaint(id);
+      if (detailed) {
+        setComplaints((prev) => {
+          const exists = prev.some((c) => c.id === id);
+          if (!exists) return [detailed, ...prev];
+          return prev.map((c) => (c.id === id ? { ...c, ...detailed } : c));
+        });
+        return detailed;
+      }
+    } catch (err) {
+      console.warn('Could not fetch complaint details:', err.message);
+    }
+    return null;
+  }, []);
 
-  const selectedComplaint = complaints.find(c => c.id === selectedComplaintId) || null;
+  const visibleComplaints = ['owner', 'admin'].includes(user?.role)
+    ? optimisticComplaints
+    : optimisticComplaints.filter(item => item.assigned_to === user?.id);
+  const selectedComplaint = visibleComplaints.find((c) => c.id === selectedComplaintId) || null;
 
-  // Status update
   const updateComplaintStatus = async (id, newStatus, userActor) => {
+    const previous = complaints;
+    startTransition(() => applyComplaint({ type: 'status', id, status: newStatus }));
     try {
       await api.updateStatus(id, newStatus);
+      setComplaints((prev) => prev.map((c) => {
+        if (c.id !== id) return c;
+        return {
+          ...c,
+          status: newStatus,
+          closed_at: newStatus === 'closed' || newStatus === 'resolved' ? new Date().toISOString() : c.closed_at,
+          messages: [...(c.messages || []), {
+            id: `audit-${Date.now()}`,
+            sender_type: 'system',
+            sender_name: 'System',
+            message_text: `Status set to ${newStatus.replace('_', ' ')} by ${userActor?.name || 'staff'}.`,
+            created_at: new Date().toISOString(),
+          }],
+        };
+      }));
+      fetchComplaintDetails(id);
+      showToast(`Status updated to ${newStatus.replace('_', ' ')}`);
     } catch (e) {
-      console.warn('Status update sync:', e.message);
+      setComplaints(previous);
+      showToast(e.message || 'Could not update status', 'error');
+      throw e;
     }
-
-    setComplaints(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      const history = c.messages || [];
-      const auditMsg = {
-        id: `audit-${Date.now()}`,
-        sender_type: 'system',
-        sender_name: 'System',
-        message_text: `Status updated to '${newStatus.toUpperCase()}' by ${userActor?.name || 'Staff'}.`,
-        created_at: new Date().toISOString()
-      };
-      return {
-        ...c,
-        status: newStatus,
-        closed_at: (newStatus === 'closed' || newStatus === 'resolved') ? new Date().toISOString() : c.closed_at,
-        messages: [...history, auditMsg]
-      };
-    }));
-
-    if (newStatus === 'closed' || newStatus === 'resolved') {
-      try {
-        confetti({
-          particleCount: 50,
-          spread: 60,
-          origin: { y: 0.7 },
-          colors: ['#A0BDDB', '#10B981', '#3B82F6']
-        });
-      } catch (e) {}
-    }
-
-    showToast(`Ticket status updated to ${newStatus.toUpperCase()}`);
   };
 
-  // Ticket assignment
   const assignComplaint = async (id, assigneeId, assigneeName) => {
+    const previous = complaints;
+    startTransition(() => applyComplaint({
+      type: 'assign',
+      id,
+      assigned_to: assigneeId,
+      assignee: assigneeId ? { id: assigneeId, name: assigneeName } : null,
+    }));
     try {
       await api.assignComplaint(id, assigneeId);
-    } catch (e) {}
-
-    setComplaints(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      const auditMsg = {
-        id: `audit-${Date.now()}`,
-        sender_type: 'system',
-        sender_name: 'System',
-        message_text: assigneeId 
-          ? `Complaint assigned to ${assigneeName}.`
-          : `Complaint unassigned.`,
-        created_at: new Date().toISOString()
-      };
-      return {
-        ...c,
-        assigned_to: assigneeId,
-        assignee: assigneeId ? { id: assigneeId, name: assigneeName } : null,
-        messages: [...(c.messages || []), auditMsg]
-      };
-    }));
-
-    showToast(assigneeId ? `Assigned to ${assigneeName}` : 'Complaint unassigned');
-  };
-
-  // Reply to Telegram customer
-  const replyToComplaint = async (id, text, senderName = 'Support Agent') => {
-    try {
-      await api.replyToComplaint(id, text);
-    } catch (e) {}
-
-    const newReply = {
-      id: `msg-${Date.now()}`,
-      sender_type: 'staff',
-      sender_name: senderName,
-      message_text: text,
-      created_at: new Date().toISOString()
-    };
-
-    setComplaints(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      return {
-        ...c,
-        status: c.status === 'pending' ? 'in_progress' : c.status,
-        messages: [...(c.messages || []), newReply]
-      };
-    }));
-
-    showToast('Reply dispatched directly to customer Telegram chat! 🚀');
-  };
-
-  // Update permissions for team member
-  const updateMemberPermissions = async (memberId, permissions) => {
-    // Optimistic update
-    setTeam(prev => ({
-      ...prev,
-      members: prev.members.map(m => m.id === memberId ? { ...m, permissions } : m)
-    }));
-
-    try {
-      const updatedUser = await api.updatePermissions(memberId, permissions);
-      if (updatedUser?.permissions) {
-        setTeam(prev => ({
-          ...prev,
-          members: prev.members.map(m => m.id === memberId ? { ...m, permissions: updatedUser.permissions } : m)
-        }));
-      }
-      showToast('Member permissions updated');
+      setComplaints((prev) => prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              assigned_to: assigneeId,
+              assignee: assigneeId ? { id: assigneeId, name: assigneeName } : null,
+              messages: [...(c.messages || []), {
+                id: `audit-${Date.now()}`,
+                sender_type: 'system',
+                sender_name: 'System',
+                message_text: `Ticket assigned to ${assigneeName || 'Unassigned'}.`,
+                created_at: new Date().toISOString(),
+              }],
+            }
+          : c
+      ));
+      fetchComplaintDetails(id);
+      showToast(assigneeId ? `Assigned to ${assigneeName}` : 'Ticket unassigned');
     } catch (e) {
-      console.error('Failed to update member permissions:', e);
-      const errorMsg = e.message === 'Failed to fetch' ? 'Connection error: backend is unreachable' : (e.message || 'Failed to update permissions');
-      showToast(errorMsg, 'error');
-      refreshAll();
+      setComplaints(previous);
+      showToast(e.message || 'Could not assign ticket', 'error');
+      throw e;
     }
   };
 
-  // Invite member by email (GitHub Style)
-  const inviteMember = async ({ email, name, phone, role = 'agent', permissions }) => {
+  const replyToComplaint = async (id, text, senderName = 'Support') => {
+    const key = createIdempotencyKey();
+    const tempId = `msg-${Date.now()}`;
+    const tempMessage = {
+      id: tempId,
+      sender_type: 'agent',
+      sender_name: senderName,
+      message_text: text,
+      created_at: new Date().toISOString(),
+    };
+    const previous = complaints;
+    startTransition(() => applyComplaint({ type: 'reply', id, message: tempMessage }));
     try {
-      const res = await api.inviteMember({ email, name, phone, role, permissions });
-      refreshAll();
-      showToast(res.message || `Invitation dispatched to ${email}!`);
+      const realMessage = await api.replyToComplaint(id, text, key);
+      setComplaints((prev) => prev.map((c) => {
+        if (c.id !== id) return c;
+        const msgList = (c.messages || []).filter((m) => m.id !== tempId);
+        return {
+          ...c,
+          status: c.status === 'pending' ? 'in_progress' : c.status,
+          messages: [...msgList, realMessage || tempMessage],
+        };
+      }));
+      fetchComplaintDetails(id);
+      showToast('Reply sent to customer via Telegram');
+      return realMessage;
+    } catch (e) {
+      setComplaints(previous);
+      showToast(e.message || 'Reply failed', 'error');
+      throw e;
+    }
+  };
+
+  const updateMemberPermissions = async (memberId, permissions) => {
+    const updatedUser = await api.updatePermissions(memberId, permissions);
+    if (!updatedUser) throw new Error('Could not save permissions.');
+    setTeam((prev) => ({
+      ...prev,
+      members: prev.members.map(member => member.id === memberId ? updatedUser : member),
+    }));
+    showToast('Permissions updated');
+    refreshAll({ background: true });
+  };
+
+  const revokeInvitation = async (id) => {
+    await api.revokeInvitation(id);
+    setTeam(previous => ({
+      ...previous,
+      invitations: previous.invitations.filter(invitation => invitation.id !== id),
+    }));
+    showToast('Invitation deleted');
+    refreshAll({ background: true });
+  };
+
+  const inviteMember = async (payload, idempotencyKey) => {
+    const key = idempotencyKey || createIdempotencyKey();
+    try {
+      const res = await api.inviteMember(payload, key);
+      await refreshAll({ background: true });
+      showToast(res.message || `Invitation sent to ${payload.email}`);
       return res;
     } catch (e) {
+      refreshAll({ background: true });
       showToast(e.message || 'Failed to send invite', 'error');
       throw e;
     }
   };
 
-  // Link new bot
-  const linkBot = async ({ bot_token, bot_title }) => {
+  const linkBot = async ({ bot_token, bot_title }, idempotencyKey) => {
+    const key = idempotencyKey || createIdempotencyKey();
     try {
-      await api.linkBot(bot_token, bot_title);
-      await refreshAll();
-      showToast('Telegram Bot linked and webhook activated! 🤖');
+      await api.linkBot(bot_token, bot_title, key);
+      await refreshAll({ background: true });
+      showToast('Bot connected');
     } catch (err) {
       showToast(err.message || 'Failed to link bot', 'error');
       throw err;
     }
   };
 
-  // Change subscription plan (Upgrade or Downgrade)
-  const upgradePlan = async (planId) => {
+  const upgradePlan = async (planId, billingPeriod, idempotencyKey) => {
+    const key = idempotencyKey || createIdempotencyKey();
     try {
-      const res = await api.upgradeSubscription(planId);
-      await refreshAll();
-      showToast(res?.message || `Subscription plan updated!`);
+      const res = await api.upgradeSubscription(planId, billingPeriod, key);
+      const live = await api.getSubscription();
+      if (live) setSubscription(live);
+      showToast(res?.message || 'Plan updated');
       return res;
     } catch (err) {
-      showToast(err.message || 'Failed to update plan', 'error');
+      showToast(err.message || 'Could not update plan', 'error');
       throw err;
     }
   };
 
   const activateBot = async (botId) => {
     try {
-      const res = await api.activateBot(botId);
-      await refreshAll();
-      showToast(res.message || 'Bot activated successfully!');
+      await api.activateBot(botId);
+      await refreshAll({ background: true });
+      showToast('Bot activated');
     } catch (err) {
       showToast(err.message || 'Failed to activate bot', 'error');
       throw err;
@@ -283,88 +358,96 @@ export const DataProvider = ({ children }) => {
 
   const pauseBot = async (botId) => {
     try {
-      const res = await api.pauseBot(botId);
-      await refreshAll();
-      showToast(res.message || 'Bot paused');
+      await api.pauseBot(botId);
+      await refreshAll({ background: true });
+      showToast('Bot paused');
     } catch (err) {
       showToast(err.message || 'Failed to pause bot', 'error');
       throw err;
     }
   };
 
-  // Delete bot permanently
   const deleteBot = async (botId) => {
-    try {
-      const res = await api.deleteBot(botId);
-      setBots(prev => prev.filter(b => b.id !== botId));
-      await refreshAll();
-      showToast(res?.message || 'Bot deleted permanently');
-      return res;
-    } catch (err) {
-      showToast(err.message || 'Failed to delete bot', 'error');
-      throw err;
-    }
+    const bot = bots.find((b) => b.id === botId);
+    startTransition(() => applyBots({ type: 'remove', id: botId }));
+    setBots((prev) => prev.filter((b) => b.id !== botId));
+    showUndo({
+      message: 'Bot scheduled for removal',
+      duration: 8000,
+      onUndo: () => {
+        if (bot) setBots((prev) => [...prev, bot]);
+      },
+      onCommit: async () => {
+        try {
+          await api.deleteBot(botId);
+          await refreshAll({ background: true });
+        } catch (err) {
+          if (bot) setBots((prev) => [...prev, bot]);
+          showToast(err.message || 'Failed to delete bot', 'error');
+        }
+      },
+    });
   };
 
-  // Remove team member (Owner only)
   const deleteMember = async (memberId) => {
-    try {
-      const res = await api.deleteMember(memberId);
-      setTeam(prev => ({
-        ...prev,
-        members: prev.members.filter(m => m.id !== memberId)
-      }));
-      await refreshAll();
-      showToast(res?.message || 'Member removed successfully');
-      return res;
-    } catch (err) {
-      showToast(err.message || 'Failed to remove member', 'error');
-      throw err;
-    }
+    const member = team.members.find((m) => m.id === memberId);
+    startTransition(() => applyTeam({ type: 'remove', id: memberId }));
+    setTeam((prev) => ({ ...prev, members: prev.members.filter((m) => m.id !== memberId) }));
+    showUndo({
+      message: 'Member scheduled for removal',
+      duration: 8000,
+      onUndo: () => {
+        if (member) setTeam((prev) => ({ ...prev, members: [...prev.members, member] }));
+      },
+      onCommit: async () => {
+        try {
+          await api.deleteMember(memberId);
+          await refreshAll({ background: true });
+        } catch (err) {
+          if (member) setTeam((prev) => ({ ...prev, members: [...prev.members, member] }));
+          showToast(err.message || 'Failed to remove member', 'error');
+        }
+      },
+    });
   };
-
 
   return (
     <DataContext.Provider
       value={{
-        complaints,
+        complaints: visibleComplaints,
         selectedComplaint,
         selectedComplaintId,
         setSelectedComplaintId,
-        bots,
-        team,
+        bots: optimisticBots,
+        team: optimisticTeam,
         subscription,
+        complaintError,
         stats,
         categoriesBreakdown,
         loading,
+        hydrated,
         refreshAll,
+        fetchComplaintDetails,
         updateComplaintStatus,
         assignComplaint,
         replyToComplaint,
         updateMemberPermissions,
         inviteMember,
+        revokeInvitation,
         linkBot,
         activateBot,
         pauseBot,
         deleteBot,
         deleteMember,
         upgradePlan,
-        showToast
+        showToast,
+        createIdempotencyKey,
+        inFlight,
       }}
     >
       {children}
-
-      {/* Global Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce-subtle">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white border border-slate-200 shadow-xl text-xs font-semibold text-slate-800">
-            <span className="w-2 h-2 rounded-full bg-[#A0BDDB]" />
-            <span>{toast.message}</span>
-          </div>
-        </div>
-      )}
     </DataContext.Provider>
   );
-};
+}
 
 export const useData = () => useContext(DataContext);

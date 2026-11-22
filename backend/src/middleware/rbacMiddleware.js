@@ -45,3 +45,7 @@ export function requirePermission(permissionKey) {
     });
   };
 }
+
+export function complaintAssigneeScope(user) {
+  return ['owner', 'admin'].includes(user.role) ? undefined : user.id;
+}

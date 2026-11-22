@@ -3,10 +3,12 @@ import React, {
   useContext,
   useEffect,
   useState,
+  useRef,
   useCallback,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth as useClerkAuth, useUser } from '@clerk/react';
-import { api, setAuthToken, setTokenGetter } from '../services/api';
+import { api, createIdempotencyKey, setAuthToken, setTokenGetter } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -14,20 +16,12 @@ export const AuthProvider = ({ children }) => {
   const {
     isLoaded,
     isSignedIn,
+    sessionId,
     getToken,
     signOut: clerkSignOut,
   } = useClerkAuth();
 
   const { user: clerkUser } = useUser();
-
-  useEffect(() => {
-    console.log('[Clerk diagnostic]', {
-      isLoaded,
-      isSignedIn,
-      hasClerkUser: Boolean(clerkUser),
-    });
-  }, [isLoaded, isSignedIn, clerkUser]);
-
 
   useEffect(() => {
     if (typeof getToken === 'function') {
@@ -37,101 +31,111 @@ export const AuthProvider = ({ children }) => {
 
   const [user, setUser] = useState(null);
   const [org, setOrg] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [checkedSession, setCheckedSession] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [workspaceRequired, setWorkspaceRequired] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const requestVersion = useRef(0);
+  const navigate = useNavigate();
 
   const refresh = useCallback(async () => {
+    if (!isLoaded || !isSignedIn || !sessionId) return null;
+    const version = ++requestVersion.current;
+    setChecking(true);
+    setWorkspaceRequired(false);
     try {
-      if (!isSignedIn && !clerkUser) {
-        setAuthToken(null);
-        setUser(null);
-        setOrg(null);
-        setAuthError(null);
-        return null;
-      }
-
       const token = await getToken();
-      if (!token) return null;
+      if (version !== requestVersion.current) return null;
+      if (!token) throw new Error('Your sign-in session is not ready.');
       setAuthToken(token);
-
       const data = await api.getMe();
-      if (data?.user) {
-        setUser(data.user);
-        setOrg(data.org);
-        setAuthError(null);
-        return data;
-      }
-      return null;
+      if (version !== requestVersion.current) return null;
+      if (!data?.user) throw new Error('Could not load your workspace.');
+      setUser(data.user);
+      setOrg(data.org);
+      setAuthError(null);
+      return data;
     } catch (error) {
-      console.warn('[Auth refresh notice]:', error.message);
-      // Keep the Clerk token for authenticated onboarding requests if not onboarded.
+      if (version !== requestVersion.current) return null;
       setUser(null);
       setOrg(null);
-      setAuthError(error.message || 'Authentication failed.');
+      const needsWorkspace = error.code === 'WORKSPACE_REQUIRED';
+      setWorkspaceRequired(needsWorkspace);
+      setAuthError(needsWorkspace ? null : error.message);
       return null;
+    } finally {
+      if (version === requestVersion.current) {
+        setCheckedSession(sessionId);
+        setChecking(false);
+      }
     }
-  }, [isSignedIn, clerkUser, getToken]);
+  }, [isLoaded, isSignedIn, sessionId, getToken]);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || signingOut) return;
+    if (isSignedIn) {
+      refresh();
+    } else {
+      setAuthToken(null);
+      setUser(null);
+      setOrg(null);
+      setCheckedSession(null);
+      setWorkspaceRequired(false);
+      setChecking(false);
+      setAuthError(null);
+    }
+    return () => { requestVersion.current++; };
+  }, [isLoaded, isSignedIn, signingOut, refresh]);
 
-    let cancelled = false;
-
-    const initialize = async () => {
-      try {
-        if (isSignedIn || clerkUser) {
-          await refresh();
-        } else {
-          setUser(null);
-          setOrg(null);
-        }
-      } catch (error) {
-        console.error('[Auth] Refresh failed', error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initialize();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, clerkUser?.id, refresh]);
-
+  const loading = !isLoaded || Boolean(isSignedIn &&
+    (checkedSession !== sessionId || checking || !clerkUser));
 
   const onboardBusiness = async (businessName) => {
     const token = await getToken({ skipCache: true });
     if (!token) throw new Error('Your sign-in session is not ready. Please refresh and try again.');
     setAuthToken(token);
-    const data = await api.onboardBusiness(businessName);
+    const data = await api.onboardBusiness(businessName, createIdempotencyKey());
     setUser(data.user);
     setOrg(data.org);
     setAuthError(null);
     return data;
   };
 
-  const completeInvitation = async (inviteCode) => {
+  const completeInvitation = useCallback(async (inviteCode) => {
     const token = await getToken({ skipCache: true });
     if (!token) throw new Error('Your sign-in session is not ready. Please refresh and try again.');
     setAuthToken(token);
-    const data = await api.completeInvitation(inviteCode);
+    const data = await api.completeInvitation(inviteCode, createIdempotencyKey());
     setUser(data.user);
     setOrg(data.org);
     setAuthError(null);
     return data;
-  };
+  }, [getToken]);
 
   const signOut = async () => {
-    setAuthToken(null);
-    setUser(null);
-    setOrg(null);
-    setIsProfileOpen(false);
-    await clerkSignOut();
+    if (signingOut) return;
+    requestVersion.current++;
+    setSigningOut(true);
+    try {
+      await clerkSignOut();
+      setAuthToken(null);
+      setUser(null);
+      setOrg(null);
+      setIsProfileOpen(false);
+      navigate('/', { replace: true });
+    } catch (error) {
+      setAuthError(error.message || 'Could not sign out. Try again.');
+      setSigningOut(false);
+    }
   };
+
+  const syncMemberPermissions = useCallback((member) => {
+    setUser(previous => previous?.id === member.id
+      ? { ...previous, permissions: member.permissions }
+      : previous);
+  }, []);
 
   const can = (key) =>
     user?.role === 'owner' || Boolean(user?.permissions?.[key]);
@@ -139,10 +143,13 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider
       value={{
-        user,
-        org,
-        clerkUser,
+        user: isSignedIn && checkedSession === sessionId ? user : null,
+        org: isSignedIn && checkedSession === sessionId ? org : null,
+        clerkUser: isSignedIn ? clerkUser : null,
         loading,
+        isSignedIn,
+        signingOut,
+        workspaceRequired: isSignedIn && checkedSession === sessionId && workspaceRequired,
         authError,
         isProfileOpen,
         setIsProfileOpen,
@@ -151,6 +158,7 @@ export const AuthProvider = ({ children }) => {
         completeInvitation,
         signOut,
         can,
+        syncMemberPermissions,
       }}
     >
       {children}
