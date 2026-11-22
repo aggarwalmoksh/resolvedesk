@@ -2,6 +2,7 @@ import express from 'express';
 import { clerkClient, getAuth, verifyToken } from '@clerk/express';
 import { authMiddleware, sanitizeUser } from '../middleware/authMiddleware.js';
 import { store, DEFAULT_PERMISSIONS } from '../db/store.js';
+import { complaintAssigneeScope } from '../middleware/rbacMiddleware.js';
 import { CLERK_SECRET_KEY } from '../config.js';
 
 const router = express.Router();
@@ -32,19 +33,8 @@ async function clerkIdentity(req) {
             userId = verified.sub;
             sessionClaims = verified;
           }
-        } catch (verifyErr) {
-          console.warn('[clerkIdentity] verifyToken notice:', verifyErr.message);
-          // Parse token claims safely
-          try {
-            const parts = rawToken.split('.');
-            if (parts.length === 3) {
-              const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-              if (payload?.sub) {
-                userId = payload.sub;
-                sessionClaims = payload;
-              }
-            }
-          } catch {}
+        } catch {
+          // Unverified tokens do not establish identity.
         }
       }
     }
@@ -56,12 +46,7 @@ async function clerkIdentity(req) {
     throw err;
   }
 
-  let clerkUser = null;
-  try {
-    clerkUser = await clerkClient.users.getUser(userId);
-  } catch (clerkErr) {
-    console.warn('[clerkIdentity] Note: could not fetch Clerk user profile details:', clerkErr.message);
-  }
+  const clerkUser = await clerkClient.users.getUser(userId);
 
   const email = clerkUser?.primaryEmailAddress?.emailAddress?.toLowerCase() ||
     clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() ||
@@ -77,13 +62,17 @@ async function clerkIdentity(req) {
     clerkUser?.phoneNumbers?.[0]?.phoneNumber ||
     null;
 
-  return { clerk_user_id: userId, email, name, phone };
+  const verifiedEmails = (clerkUser?.emailAddresses || [])
+    .filter(address => address.verification?.status === 'verified')
+    .map(address => address.emailAddress.toLowerCase());
+
+  return { clerk_user_id: userId, email, name, phone, verifiedEmails };
 }
 
 // Creates the app tenant only after Clerk has established an identity.
 router.post('/onboard-business', async (req, res, next) => {
   try {
-    const identity = await clerkIdentity(req);
+    const { verifiedEmails: _verifiedEmails, ...identity } = await clerkIdentity(req);
     const businessName = String(req.body.businessName || '').trim();
     if (!businessName) return res.status(400).json({ error: 'Organization name is required.' });
 
@@ -102,19 +91,50 @@ router.post('/onboard-business', async (req, res, next) => {
   }
 });
 
+router.get('/pending-invitations', async (req, res, next) => {
+  try {
+    const { verifiedEmails } = await clerkIdentity(req);
+    const lists = await Promise.all([...new Set(verifiedEmails)].map(email => store.getPendingInvitationsForEmail(email)));
+    const data = lists.flat().map(invite => ({
+      invite_code: invite.invite_code,
+      role: invite.role,
+      org_name: invite.organizations?.name || 'ResolveDesk workspace',
+    }));
+    res.json({ status: 'success', data });
+  } catch (error) { next(error); }
+});
+
 // Completes a Clerk-authenticated invitation. The recipient email must match.
 router.post('/complete-invitation', async (req, res, next) => {
   try {
-    const identity = await clerkIdentity(req);
+    const { verifiedEmails, ...identity } = await clerkIdentity(req);
     const inviteCode = String(req.body.inviteCode || '').trim().toUpperCase();
     if (!inviteCode) return res.status(400).json({ error: 'Invitation code is required.' });
     const invite = await store.getInvitationByCode(inviteCode);
     if (!invite) return res.status(404).json({ error: 'This invitation is invalid, expired, or has already been used.' });
-    if (!identity.email || identity.email !== invite.email) return res.status(403).json({ error: 'Sign in with the email address this invitation was sent to.' });
+    if (!verifiedEmails.includes(invite.email.toLowerCase())) return res.status(403).json({ error: 'Sign in with the email address this invitation was sent to.' });
     const existing = await store.getUserByClerkId(identity.clerk_user_id);
-    if (existing) return res.json({ status: 'success', data: { user: sanitizeUser(existing), org: await store.getOrgById(existing.org_id) } });
-    const user = await store.createUser({ ...identity, org_id: invite.org_id, role: invite.role, permissions: invite.permissions });
-    await store.updateInvitation(invite.id, { status: 'accepted', accepted_by_clerk_user_id: identity.clerk_user_id, accepted_at: new Date().toISOString() });
+    if (existing) {
+      if (existing.org_id !== invite.org_id || !existing.is_active) {
+        return res.status(409).json({ error: 'This account already has a workspace membership.' });
+      }
+      return res.json({ status: 'success', data: { user: sanitizeUser(existing), org: await store.getOrgById(existing.org_id) } });
+    }
+    const claimed = await store.transitionInvitation(invite.id, invite.org_id, 'pending', { status: 'accepting' });
+    if (!claimed) return res.status(409).json({ error: 'This invitation is no longer pending.' });
+
+    let user;
+    try {
+      user = await store.createUser({ ...identity, email: invite.email, org_id: invite.org_id, role: invite.role, permissions: invite.permissions });
+    } catch (error) {
+      await store.transitionInvitation(invite.id, invite.org_id, 'accepting', { status: 'pending' });
+      throw error;
+    }
+    await store.transitionInvitation(invite.id, invite.org_id, 'accepting', {
+      status: 'accepted',
+      accepted_by_clerk_user_id: identity.clerk_user_id,
+      accepted_at: new Date().toISOString(),
+    });
     res.status(201).json({ status: 'success', data: { user: sanitizeUser(user), org: await store.getOrgById(invite.org_id) } });
   } catch (error) {
     console.error('❌ [complete-invitation] Error:', error);
@@ -124,7 +144,7 @@ router.post('/complete-invitation', async (req, res, next) => {
 
 router.get('/me', authMiddleware, async (req, res, next) => {
   try {
-    const [bots, members, complaints] = await Promise.all([store.getBotsByOrg(req.org.id), store.getUsersByOrg(req.org.id), store.getComplaints(req.org.id)]);
+    const [bots, members, complaints] = await Promise.all([store.getBotsByOrg(req.org.id), store.getUsersByOrg(req.org.id), store.getComplaints(req.org.id, { assigned_to: complaintAssigneeScope(req.user) })]);
     res.json({ status: 'success', data: { user: req.user, org: { ...req.org, stats: { botsCount: bots.length, membersCount: members.length, complaintsCount: complaints.length } } } });
   } catch (error) { next(error); }
 });

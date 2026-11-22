@@ -1,11 +1,14 @@
 import crypto from 'crypto';
 import { supabase } from './supabase.js';
 
+import { PLAN_CATALOG } from '../../../shared/plans.js';
+
+const [starter, growth] = PLAN_CATALOG;
 export const PLANS = {
-  starter: { id: 'starter', name: 'Starter Plan', currency: '₹', price_monthly: 399, max_bots: 1, max_members: 3 },
-  growth: { id: 'growth', name: 'Growth Plan', currency: '₹', price_monthly: 599, max_bots: 3, max_members: 10 },
-  scale: { id: 'scale', name: 'Pro Enterprise', currency: '₹', price_monthly: 999, max_bots: 10, max_members: 25 },
-  enterprise: { id: 'enterprise', name: 'Pro Enterprise', currency: '₹', price_monthly: 999, max_bots: 10, max_members: 25 }
+  starter,
+  growth,
+  scale: { id: 'scale', name: 'Business', currency: '₹', price_monthly: 999, max_bots: 10, max_members: 25 },
+  enterprise: { id: 'enterprise', name: 'Business', currency: '₹', price_monthly: 999, max_bots: 10, max_members: 25 },
 };
 
 export const DEFAULT_PERMISSIONS = {
@@ -18,7 +21,7 @@ function db() {
   if (!supabase) throw new Error('Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
   return supabase;
 }
-function checked(error, operation) { if (error) throw new Error(`${operation}: ${error.message}`); }
+function checked(error, operation) { if (error) throw Object.assign(new Error(`${operation}: ${error.message}`), { code: error.code }); }
 
 class SupabaseStore {
   async createOrg({ name, phone = null, subscription_tier = 'starter' }) { const plan = PLANS[subscription_tier] || PLANS.starter; const { data, error } = await db().from('organizations').insert({ name, phone, subscription_tier: plan.id, max_bots: plan.max_bots, max_members: plan.max_members }).select().single(); checked(error, 'Could not create organization'); return data; }
@@ -57,14 +60,28 @@ class SupabaseStore {
   async getActiveComplaintForCustomer(orgId, customerId) { const { data, error } = await db().from('complaints').select('*').eq('org_id', orgId).eq('customer_id', customerId).in('status', ['pending', 'in_progress']).order('created_at', { ascending: false }).limit(1).maybeSingle(); checked(error, 'Could not load complaint'); return data; }
   async createComplaint(values) { const ticket_number = `TICK-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; const { data, error } = await db().from('complaints').insert({ ...values, ticket_number, status: 'pending' }).select().single(); checked(error, 'Could not create complaint'); return data; }
   async getComplaints(orgId, filters = {}) { let query = db().from('complaints').select('*, customers(*), bots(*), assignee:users!complaints_assigned_to_fkey(*)').eq('org_id', orgId).order('updated_at', { ascending: false }); for (const key of ['status', 'category', 'assigned_to', 'bot_id']) if (filters[key]) query = query.eq(key, filters[key]); if (filters.search) { const term = `%${filters.search}%`; query = query.or(`ticket_number.ilike.${term},title.ilike.${term},description.ilike.${term}`); } const { data, error } = await query; checked(error, 'Could not load complaints'); return data || []; }
-  async getComplaintById(id, orgId = null) { let query = db().from('complaints').select('*, customers(*), bots(*), assignee:users!complaints_assigned_to_fkey(*)').eq('id', id); if (orgId) query = query.eq('org_id', orgId); const { data, error } = await query.maybeSingle(); checked(error, 'Could not load complaint'); return data; }
-  async updateComplaint(id, updates, orgId) { let query = db().from('complaints').update({ ...updates, updated_at: new Date().toISOString(), ...(updates.status && ['closed', 'resolved'].includes(updates.status) ? { closed_at: new Date().toISOString() } : {}) }).eq('id', id); if (orgId) query = query.eq('org_id', orgId); const { data, error } = await query.select().maybeSingle(); checked(error, 'Could not update complaint'); return data; }
+  async getComplaintById(id, orgId = null, assignedTo) { let query = db().from('complaints').select('*, customers(*), bots(*), assignee:users!complaints_assigned_to_fkey(*)').eq('id', id); if (orgId) query = query.eq('org_id', orgId); if (assignedTo) query = query.eq('assigned_to', assignedTo); const { data, error } = await query.maybeSingle(); checked(error, 'Could not load complaint'); return data; }
+  async updateComplaint(id, updates, orgId, assignedTo) { let query = db().from('complaints').update({ ...updates, updated_at: new Date().toISOString(), ...(updates.status && ['closed', 'resolved'].includes(updates.status) ? { closed_at: new Date().toISOString() } : {}) }).eq('id', id); if (orgId) query = query.eq('org_id', orgId); if (assignedTo) query = query.eq('assigned_to', assignedTo); const { data, error } = await query.select().maybeSingle(); checked(error, 'Could not update complaint'); return data; }
   async addMessage(values) { const { data, error } = await db().from('complaint_messages').insert({ ...values, sender_id: String(values.sender_id) }).select().single(); checked(error, 'Could not save message'); return data; }
   async getMessagesByComplaint(id) { const { data, error } = await db().from('complaint_messages').select('*').eq('complaint_id', id).order('created_at'); checked(error, 'Could not load messages'); return data || []; }
 
   async createInvitation({ org_id, email, role = 'agent', permissions, clerk_invitation_id = null }) { const invite_code = `INV-${crypto.randomBytes(12).toString('hex').toUpperCase()}`; const { data, error } = await db().from('invitations').insert({ org_id, email: email?.toLowerCase(), role, permissions: permissions || DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.agent, invite_code, clerk_invitation_id }).select().single(); checked(error, 'Could not create invitation'); return data; }
   async getInvitationByCode(code) { const { data, error } = await db().from('invitations').select('*').eq('invite_code', code).eq('status', 'pending').gt('expires_at', new Date().toISOString()).maybeSingle(); checked(error, 'Could not load invitation'); return data; }
-  async getInvitationsByOrg(orgId) { const { data, error } = await db().from('invitations').select('*').eq('org_id', orgId).eq('status', 'pending').order('created_at'); checked(error, 'Could not load invitations'); return data || []; }
+  async getPendingInvitationsForEmail(email) {
+    const { data, error } = await db().from('invitations').select('invite_code, org_id, role, organizations(name)')
+      .eq('email', email).eq('status', 'pending').gt('expires_at', new Date().toISOString()).order('created_at');
+    checked(error, 'Could not load pending invitations');
+    return data || [];
+  }
+  async getInvitationsByOrg(orgId) { const { data, error } = await db().from('invitations').select('*').eq('org_id', orgId).eq('status', 'pending').gt('expires_at', new Date().toISOString()).order('created_at'); checked(error, 'Could not load invitations'); return data || []; }
+  async transitionInvitation(id, orgId, expectedStatus, updates) {
+    let query = db().from('invitations').update(updates)
+      .eq('id', id).eq('org_id', orgId).eq('status', expectedStatus);
+    if (updates.status === 'accepting') query = query.gt('expires_at', new Date().toISOString());
+    const { data, error } = await query.select().maybeSingle();
+    checked(error, 'Could not update invitation');
+    return data;
+  }
   async updateInvitation(id, updates) { const { data, error } = await db().from('invitations').update(updates).eq('id', id).select().maybeSingle(); checked(error, 'Could not update invitation'); return data; }
 }
 

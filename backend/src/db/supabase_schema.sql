@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(32),
     subscription_tier VARCHAR(50) NOT NULL DEFAULT 'starter',
+    billing_period text NOT NULL DEFAULT 'monthly' CHECK (billing_period IN ('monthly', 'annual')),
     max_bots INT NOT NULL DEFAULT 1,
-    max_members INT NOT NULL DEFAULT 3,
+    max_members INT NOT NULL DEFAULT 2,
     ticket_seq INT NOT NULL DEFAULT 1000,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

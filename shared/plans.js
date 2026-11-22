@@ -1,0 +1,32 @@
+export const PLAN_CATALOG = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    currency: '₹',
+    price_monthly: 0,
+    price_annual_monthly: 0,
+    max_bots: 1,
+    max_members: 2,
+    description: 'For independent founders and small teams',
+    features: ['Up to 100 resolved complaints', 'Basic inbox triage'],
+  },
+  {
+    id: 'growth',
+    name: 'Growth',
+    currency: '₹',
+    price_monthly: 99,
+    price_annual_monthly: 79,
+    max_bots: 5,
+    max_members: 10,
+    description: 'For teams managing multiple Telegram bots',
+    features: ['Unlimited complaint processing', 'Priorities and category dispatch', 'Priority email support'],
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    price_monthly: null,
+    description: 'For larger support operations',
+    custom: true,
+    features: ['Custom workflows and SLA alerts', 'Dedicated account escalation'],
+  },
+];

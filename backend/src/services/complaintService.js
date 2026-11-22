@@ -1,3 +1,4 @@
+import { complaintAssigneeScope } from '../middleware/rbacMiddleware.js';
 import { store } from '../db/store.js';
 import { sendTelegramReply } from './telegramService.js';
 
@@ -110,7 +111,7 @@ export async function ingestTelegramMessage(bot, telegramMessage) {
  * Staff reply to customer - saves in thread & dispatches to Telegram
  */
 export async function replyToComplaint({ complaintId, orgId, user, messageText }) {
-  const complaint = await store.getComplaintById(complaintId, orgId);
+  const complaint = await store.getComplaintById(complaintId, orgId, complaintAssigneeScope(user));
   if (!complaint) throw new Error('Complaint not found');
 
   const customer = await store.getCustomerById(complaint.customer_id);
@@ -130,7 +131,7 @@ export async function replyToComplaint({ complaintId, orgId, user, messageText }
 
   // If status was pending, advance to in_progress
   if (complaint.status === 'pending') {
-    await store.updateComplaint(complaint.id, { status: 'in_progress' }, orgId);
+    await store.updateComplaint(complaint.id, { status: 'in_progress' }, orgId, complaintAssigneeScope(user));
   }
 
   // Send reply directly to customer on Telegram

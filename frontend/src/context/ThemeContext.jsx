@@ -1,39 +1,39 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 
-const ThemeContext = createContext();
+const ThemeContext = createContext({
+  theme: 'light',
+  isDark: false,
+  toggleTheme: () => {},
+  setTheme: () => {},
+  resolvedTheme: 'light',
+});
 
-export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('resolvedesk_theme');
-      if (stored === 'dark' || stored === 'light') return stored;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'light';
-  });
-
+export function ThemeProvider({ children }) {
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('resolvedesk_theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
-  };
+    root.classList.remove('dark');
+    root.classList.add('light');
+    root.style.colorScheme = 'light';
+    try {
+      localStorage.removeItem('theme');
+    } catch {}
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider
+      value={{
+        theme: 'light',
+        isDark: false,
+        toggleTheme: () => {},
+        setTheme: () => {},
+        resolvedTheme: 'light',
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
-};
+}
 
-export const useTheme = () => {
-  const ctx = useContext(ThemeContext);
-  return ctx || { theme: 'light', toggleTheme: () => {}, isDark: false };
-};
+export function useTheme() {
+  return useContext(ThemeContext);
+}

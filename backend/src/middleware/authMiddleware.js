@@ -27,13 +27,7 @@ export async function authMiddleware(req, res, next) {
             const verified = await verifyToken(rawToken, { secretKey: CLERK_SECRET_KEY });
             if (verified?.sub) userId = verified.sub;
           } catch {
-            try {
-              const parts = rawToken.split('.');
-              if (parts.length === 3) {
-                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-                if (payload?.sub) userId = payload.sub;
-              }
-            } catch {}
+            return res.status(401).json({ error: 'Authentication required.' });
           }
         }
       }
@@ -41,7 +35,8 @@ export async function authMiddleware(req, res, next) {
 
     if (!userId) return res.status(401).json({ error: 'Authentication required.' });
     const user = await store.getUserByClerkId(userId);
-    if (!user || !user.is_active) return res.status(403).json({ error: 'Your ResolveDesk access was removed or is inactive.' });
+    if (!user) return res.status(403).json({ error: 'Set up your ResolveDesk workspace.', code: 'WORKSPACE_REQUIRED' });
+    if (!user.is_active) return res.status(403).json({ error: 'Your ResolveDesk access was removed or is inactive.' });
     const org = await store.getOrgById(user.org_id);
     if (!org) return res.status(403).json({ error: 'Your organization no longer exists.' });
     req.clerkUserId = userId;

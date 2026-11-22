@@ -1,115 +1,83 @@
-import React, { useState } from 'react';
-import { 
-  Inbox, 
-  Sparkles, 
-  User, 
-  ChevronDown, 
-  ShieldCheck, 
-  LogOut, 
-  Compass,
-  Building2,
-  Sun,
-  Moon
-} from 'lucide-react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useData } from '../../context/DataContext';
-import { useTheme } from '../../context/ThemeContext';
-import { startProductTour } from '../../utils/tour';
+import { HoverMenu, MenuItem, MenuDivider } from '../../ui/Menu';
+import { Avatar } from '../../ui/primitives';
+import { cn } from '../../lib/cn';
 
-export const Navbar = () => {
-  const { user, org, personas, switchPersona, signOut, setIsProfileOpen } = useAuth();
-  const { subscription } = useData();
-  const { theme, toggleTheme } = useTheme();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+const PAGE_TITLES = {
+  dashboard: 'Dashboard',
+  inbox: 'Inbox',
+  team: 'Team',
+  bots: 'Bots',
+  billing: 'Billing',
+  profile: 'Settings',
+};
+
+export const Navbar = ({ onOpenProfile, activeTab }) => {
+  const navigate = useNavigate();
+  const { user, org, signOut } = useAuth();
+  const userDisplayName = user?.name || user?.email?.split('@')[0] || 'User';
+  const pageTitle = PAGE_TITLES[activeTab] || 'Dashboard';
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-        
-        {/* Left: Brand & Business Name */}
-        <div id="tour-brand-header" className="flex items-center gap-4">
-          <div 
-            onClick={() => setIsProfileOpen(true)}
-            className="relative group cursor-pointer flex items-center gap-3"
-          >
-            <div className="w-10 h-10 rounded-2xl bg-[#A0BDDB]/30 border border-[#A0BDDB]/60 flex items-center justify-center text-[#2B5484] dark:text-[#A0BDDB] shadow-sm group-hover:border-[#2B5484] transition-all">
-              <Inbox className="w-5 h-5" />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-serif text-slate-900 dark:text-white tracking-tight font-bold">
-                  ResolveDesk
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans truncate max-w-[200px]">
-                {org?.name || 'Customer Operations Desk'}
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-slate-800">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-xs text-slate-700 dark:text-slate-300 font-medium capitalize">
-              {subscription?.plan?.name || 'Starter Plan'}
-            </span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-              ({subscription?.usage?.bots?.current || 1}/{subscription?.usage?.bots?.max || 1} Bot • {subscription?.usage?.team_members?.current || 1}/{subscription?.usage?.team_members?.max || 3} Members)
-            </span>
-          </div>
-        </div>
-
-        {/* Right: Actions, Tour Trigger, Dark Mode Toggle & Profile Dashboard */}
-        <div className="flex items-center gap-3">
-          
-          {/* Driver.js Product Tour Trigger */}
-          <button
-            onClick={startProductTour}
-            className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
-          >
-            <Compass className="w-4 h-4 text-[#2B5484] dark:text-[#A0BDDB]" />
-            <span>Interactive Tour</span>
-          </button>
-
-          {/* Theme Toggle Button (Light / Dark) */}
-          <button
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-600 hover:-rotate-12 transition-transform" />
-            )}
-          </button>
-
-          {/* Business Profile Avatar Button */}
-          <button
-            id="tour-profile-btn"
-            onClick={() => setIsProfileOpen(true)}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-[#A0BDDB] transition-all shadow-sm text-left group"
-          >
-            <div className="w-8 h-8 rounded-xl bg-[#A0BDDB]/30 border border-[#A0BDDB]/50 flex items-center justify-center text-[#2B5484] dark:text-[#A0BDDB] group-hover:scale-105 transition-transform">
-              <User className="w-4 h-4" />
-            </div>
-
-            <div className="hidden sm:block">
-              <div className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
-                {user?.name || 'Alex Morgan'}
-              </div>
-              <div className="text-[10px] text-[#2B5484] dark:text-[#A0BDDB] uppercase tracking-wider font-medium">
-                {user?.role === 'owner' ? 'Owner / Admin' : 'Staff Agent'}
-              </div>
-            </div>
-
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200" />
-          </button>
-
-        </div>
-
+    <header
+      className="sticky top-0 z-30 h-14 border-b border-border-default bg-surface-1 px-4 sm:px-6 lg:px-8 flex items-center justify-between"
+      role="banner"
+    >
+      {/* Left: Page title */}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-xs text-text-tertiary hidden sm:inline">{org?.name || 'Workspace'}</span>
+        <span className="text-xs text-text-tertiary hidden sm:inline">/</span>
+        <h1 className="text-sm font-semibold text-text-primary truncate">{pageTitle}</h1>
       </div>
+
+      {/* Right: User menu */}
+      <HoverMenu
+        position="bottom-right"
+        trigger={
+          <button
+            type="button"
+            className={cn(
+              'flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1',
+              'hover:bg-surface-2 transition-colors',
+              'min-h-[36px]'
+            )}
+            aria-haspopup="true"
+          >
+            <Avatar size="sm" name={userDisplayName} />
+            <span className="hidden sm:block text-xs font-medium text-text-primary truncate max-w-[120px]">
+              {userDisplayName}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 text-text-tertiary hidden sm:block" strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        }
+      >
+        <div className="w-52 rounded-[var(--radius-lg)] border border-border-default bg-surface-1 shadow-lg overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-border-default">
+            <p className="text-xs font-semibold text-text-primary truncate">{userDisplayName}</p>
+            <p className="text-[11px] text-text-tertiary truncate">{user?.email || ''}</p>
+          </div>
+          <div className="py-1">
+            <MenuItem
+              onClick={() => navigate('/app/profile')}
+              className="px-3.5 py-2 text-xs flex items-center gap-2.5 text-text-secondary hover:text-text-primary hover:bg-surface-2"
+            >
+              <User className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <span>Workspace Settings</span>
+            </MenuItem>
+            <MenuDivider />
+            <MenuItem
+              onClick={signOut}
+              className="px-3.5 py-2 text-xs flex items-center gap-2.5 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-500/10"
+            >
+              <LogOut className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <span>Sign out</span>
+            </MenuItem>
+          </div>
+        </div>
+      </HoverMenu>
     </header>
   );
 };

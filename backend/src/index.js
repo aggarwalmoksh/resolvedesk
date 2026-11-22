@@ -36,7 +36,7 @@ app.use((req, res, next) => {
     res.header('Vary', 'Origin');
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Telegram-Bot-Api-Secret-Token');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key, X-Telegram-Bot-Api-Secret-Token');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -47,6 +47,28 @@ app.use(clerkMiddleware({
   secretKey: CLERK_SECRET_KEY,
   publishableKey: CLERK_PUBLISHABLE_KEY
 }));
+
+const idempotencyCache = new Map();
+app.use((req, res, next) => {
+  const key = req.get('Idempotency-Key');
+  if (!key || req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return next();
+  }
+  if (idempotencyCache.has(key)) {
+    const cached = idempotencyCache.get(key);
+    return res.status(cached.status).json(cached.body);
+  }
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    idempotencyCache.set(key, { status: res.statusCode || 200, body });
+    if (idempotencyCache.size > 500) {
+      const first = idempotencyCache.keys().next().value;
+      idempotencyCache.delete(first);
+    }
+    return originalJson(body);
+  };
+  next();
+});
 
 // Health check & API Discovery endpoint
 app.get('/', (req, res) => {

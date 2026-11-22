@@ -1,191 +1,247 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SignIn, SignUp, AuthenticateWithRedirectCallback } from '@clerk/react';
-import { Building2, Inbox, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { SignIn, SignUp } from '@clerk/react';
+import { AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { Button, Input, Card } from '../../ui/primitives';
+
+function AuthCardPlaceholder({ signUp }) {
+  return <div className="rd-auth-placeholder" role="status">
+    <span className="sr-only">{signUp ? 'Loading sign-up form' : 'Loading sign-in form'}</span>
+    <div className="rd-auth-placeholder-body" aria-hidden="true">
+      <i /><i /><i />
+      <div><i /><i /></div>
+      <div><i /><i /></div>
+      <i />
+    </div>
+    <div className="rd-auth-placeholder-footer" aria-hidden="true"><i /><i /></div>
+  </div>;
+}
 
 export const AuthScreen = () => {
-  const { clerkUser, loading, onboardBusiness, completeInvitation, refresh } = useAuth();
-  const inviteCode = useMemo(() => new URLSearchParams(window.location.search).get('invite'), []);
-  const [hash, setHash] = useState(() => window.location.hash || '');
-  const [mode, setMode] = useState(inviteCode ? 'signup' : 'signin');
+  const { clerkUser, workspaceRequired, onboardBusiness, completeInvitation, signOut } = useAuth();
+  const { pathname, search, hash } = useLocation();
+  const navigate = useNavigate();
+  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const inviteCode = params.get('invite');
+  const period = params.get('period');
+  const billingRedirect = period === 'monthly' || period === 'annual' ? `/app/billing?period=${period}` : '/app';
+  const onSignIn = /^\/app\/sign-in(?:\/|$)/.test(pathname);
+  const onSignUp = /^\/app\/sign-up(?:\/|$)/.test(pathname);
+  const isSignUp = onSignUp || (!onSignIn && Boolean(inviteCode || /^#\/?sign-?up(?:\/|$)/.test(hash)));
+  const [invitation, setInvitation] = useState(null);
+  const [pendingInvitations, setPendingInvitations] = useState(null);
+  const [pendingError, setPendingError] = useState('');
+  const checkingInvitations = Boolean(clerkUser && workspaceRequired && !pendingInvitations && !pendingError);
+  const canSetUp = Boolean(clerkUser && workspaceRequired && !inviteCode && pendingInvitations?.length === 0);
+  const signupRedirect = inviteCode
+    ? `/app?invite=${encodeURIComponent(inviteCode)}`
+    : billingRedirect;
   const [organization, setOrganization] = useState('');
-  const [invite, setInvite] = useState(null);
-  const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  // Track URL hash changes (Clerk hash routing emits #signup, #signin, #/sso-callback)
-  useEffect(() => {
-    const handleHash = () => {
-      const current = window.location.hash || '';
-      setHash(current);
-      if (current.includes('signup') || current.includes('sign-up')) {
-        setMode('signup');
-      } else if (current.includes('signin') || current.includes('sign-in')) {
-        setMode('signin');
-      }
-    };
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
-
-  const isSignUp = useMemo(() => {
-    return Boolean(inviteCode || hash.includes('sign-up') || hash.includes('signup') || mode === 'signup');
-  }, [inviteCode, hash, mode]);
-
-  const isSsoCallback = useMemo(() => {
-    return hash.includes('sso-callback');
-  }, [hash]);
-
-  // When returning from an SSO provider (Google), ensure refresh runs once authentication completes
-  useEffect(() => {
-    if (isSsoCallback) {
-      const timer = setTimeout(() => {
-        refresh?.();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isSsoCallback, refresh]);
+  const [showInviteJoin, setShowInviteJoin] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
 
   useEffect(() => {
-    if (inviteCode) {
-      api.verifyInvite(inviteCode).then(setInvite).catch(e => setError(e.message));
-    }
+    if (!inviteCode) return;
+    let current = true;
+    api.verifyInvite(inviteCode)
+      .then(info => { if (current) setInvitation(info); })
+      .catch(err => { if (current) setError(err.message); });
+    return () => { current = false; };
   }, [inviteCode]);
 
   useEffect(() => {
-    if (!clerkUser || !inviteCode) return;
+    if (!clerkUser || !workspaceRequired) return;
+    let current = true;
+    api.getPendingInvitations().then(async invites => {
+      if (!current) return;
+      setPendingInvitations(invites);
+      if (inviteCode && invites.length === 1 && invites[0].invite_code === inviteCode) {
+        setBusy(true);
+        try {
+          await completeInvitation(inviteCode);
+          navigate('/app', { replace: true });
+        } catch (err) {
+          if (current) setError(err.message);
+        } finally {
+          if (current) setBusy(false);
+        }
+      }
+    }).catch(err => { if (current) setPendingError(err.message); });
+    return () => { current = false; };
+  }, [clerkUser?.id, workspaceRequired, inviteCode, completeInvitation, navigate]);
+
+  async function acceptInvite(code) {
     setBusy(true);
-    completeInvitation(inviteCode).catch(e => setError(e.message)).finally(() => setBusy(false));
-  }, [clerkUser?.id, inviteCode]);
-
-  if (isSsoCallback) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-[#080D1A] text-slate-700 dark:text-slate-200">
-        <AuthenticateWithRedirectCallback signInForceRedirectUrl="/" signUpForceRedirectUrl="/" />
-        <div className="text-center">
-          <Loader2 className="w-7 h-7 mx-auto animate-spin text-[#2B5484] dark:text-[#A0BDDB]" />
-          <p className="mt-3 text-sm">Completing authentication…</p>
-        </div>
-      </div>
-    );
+    setError('');
+    try {
+      await completeInvitation(code);
+      navigate('/app', { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (loading || busy) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-[#080D1A] text-slate-700 dark:text-slate-200">
-        <div className="text-center">
-          <Loader2 className="w-7 h-7 mx-auto animate-spin text-[#2B5484] dark:text-[#A0BDDB]" />
-          <p className="mt-3 text-sm">Setting up your secure workspace…</p>
-        </div>
-      </div>
-    );
-  }
+  const handleOnboard = async (e) => {
+    e.preventDefault();
+    if (!organization.trim() || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onboardBusiness(organization.trim());
+      navigate(billingRedirect, { replace: true });
+    } catch (err) {
+      setError(err.message || 'Failed to setup workspace');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  if (clerkUser && !inviteCode) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-[#080D1A] p-5">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError('');
-            try {
-              await onboardBusiness(organization);
-            } catch (err) {
-              setError(err.message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-          className="w-full max-w-md rounded-3xl bg-white dark:bg-[#0F172B] border border-slate-200 dark:border-slate-800 p-8 shadow-xl"
-        >
-          <Building2 className="w-10 h-10 text-[#2B5484] dark:text-[#A0BDDB]" />
-          <h1 className="mt-5 text-2xl font-bold text-slate-900 dark:text-white">Create your workspace</h1>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">One last step, {clerkUser.firstName || 'there'}.</p>
-          <label className="block mt-6 text-sm font-semibold text-slate-700 dark:text-slate-200">Organization name</label>
-          <input
-            autoFocus
-            required
-            value={organization}
-            onChange={(e) => setOrganization(e.target.value)}
-            placeholder="e.g. Acme Support or Retail Desk"
-            className="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium text-sm outline-none focus:border-[#2B5484] dark:focus:border-[#A0BDDB] focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-[#A0BDDB]/30 transition-all shadow-xs"
-          />
-          {error && <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-          <button className="mt-6 w-full rounded-xl bg-[#2B5484] dark:bg-[#3B6A9F] hover:bg-[#1e426b] dark:hover:bg-[#2B5484] py-3 text-sm font-semibold text-white shadow-sm transition-all active:scale-95">
-            Create workspace
-          </button>
-        </form>
-      </div>
-    );
+  if (!clerkUser && !onSignIn && !onSignUp) {
+    return <Navigate to={{ pathname: isSignUp ? '/app/sign-up' : '/app/sign-in', search }} replace />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#080D1A] grid place-items-center p-5">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#A0BDDB]/40 text-[#2B5484] dark:text-[#A0BDDB]">
-            <Inbox />
-          </div>
-          <h1 className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">ResolveDesk</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Secure customer-support operations.</p>
-          {invite && (
-            <p className="mt-3 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 px-3 py-2 text-sm text-sky-800 dark:text-sky-300">
-              You’re joining <strong>{invite.org_name}</strong>.
-            </p>
-          )}
-        </div>
-
-        {error && <p className="mb-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 text-sm text-rose-700 dark:text-rose-400">{error}</p>}
-
-        <div className="rounded-3xl bg-white dark:bg-[#0F172B] p-3 shadow-xl border border-slate-200 dark:border-slate-800">
-          {isSignUp ? (
-            <SignUp routing="hash" signInUrl="#signin" fallbackRedirectUrl="/" />
-          ) : (
-            <SignIn routing="hash" signUpUrl="#signup" fallbackRedirectUrl="/" />
-          )}
-        </div>
-
-        {!inviteCode && (
-          <div className="mt-4 space-y-3">
-            <button
-              type="button"
-              onClick={() => {
-                const nextMode = isSignUp ? 'signin' : 'signup';
-                setMode(nextMode);
-                window.location.hash = nextMode === 'signup' ? '#signup' : '#signin';
-              }}
-              className="w-full text-sm text-[#2B5484] dark:text-[#A0BDDB] hover:underline"
-            >
-              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const code = joinCode.trim().toUpperCase();
-                if (code) window.location.assign(`/?invite=${encodeURIComponent(code)}`);
-              }}
-              className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F172B] p-3.5 shadow-xs"
-            >
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Joining an existing business?</p>
-              <div className="mt-2 flex gap-2">
-                <input
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
-                  placeholder="Invitation code"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 uppercase font-mono outline-none focus:border-[#2B5484] dark:focus:border-[#A0BDDB] focus:bg-white dark:focus:bg-slate-950"
-                />
-                <button className="rounded-xl bg-slate-900 dark:bg-[#2B5484] px-4 text-xs font-semibold text-white hover:bg-slate-800 dark:hover:bg-[#1e426b] transition-all shadow-xs">
-                  Join
-                </button>
-              </div>
-            </form>
+    <div className="rd-signin">
+      <div className="rd-signin-intro">
+        <a href="/">ResolveDesk</a>
+        <h1>{invitation ? `You’re invited to ${invitation.org_name}` : canSetUp ? 'Set up your support desk' : isSignUp ? 'Start your support workspace' : 'Pick up the conversation'}</h1>
+        <p>{invitation ? (onSignIn ? `Sign in with ${invitation.email} to join the workspace.` : `Sign up with ${invitation.email} to join the workspace.`) : 'Manage customer complaints from Telegram in one workspace.'}</p>
+      </div>
+      <div className="rd-signin-form">
+        {/* Global Error Banner (if any) */}
+        {error && (
+          <div className="w-full mb-4 p-3 rounded-[var(--radius-md)] bg-danger-50 border border-danger-500/20 text-xs text-danger-600 flex items-center gap-2 animate-shake">
+            <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+            <span>{error}</span>
           </div>
         )}
+
+        {/* Workspace Onboarding Step (when logged into Clerk but needs a workspace) */}
+        {checkingInvitations ? (
+          <Card className="w-full p-7"><p role="status">Checking workspace invitations…</p></Card>
+        ) : clerkUser && pendingInvitations?.length ? (
+          <Card className="w-full p-7 space-y-4">
+            <h2>{busy ? 'Joining your workspace…' : 'Choose a workspace invitation'}</h2>
+            {pendingInvitations.map(item => <div key={item.invite_code} className="flex flex-wrap items-center justify-between gap-2">
+              <div><strong>{item.org_name}</strong><p className="capitalize">{item.role}</p></div>
+              <button type="button" className="rd-secondary" disabled={busy} onClick={() => acceptInvite(item.invite_code)}>Accept invitation</button>
+            </div>)}
+          </Card>
+        ) : clerkUser && (inviteCode || pendingError) ? (
+          <Card className="w-full p-7 space-y-4">
+            <h2>Unable to join the workspace</h2>
+            <p>{pendingError || 'Sign in with the email address that received the invitation.'}</p>
+            <Button variant="secondary" onClick={signOut}>Sign out</Button>
+          </Card>
+        ) : canSetUp ? (
+          <Card className="w-full p-7 bg-surface-1 shadow-md border border-border-default space-y-5 animate-scale-in">
+            <div className="space-y-1 text-center">
+              <h1 className="text-xl font-semibold text-text-primary tracking-tight">
+                Create your workspace
+              </h1>
+              <p className="text-xs text-text-secondary">
+                Enter your company or organization name to activate your Telegram support console.
+              </p>
+            </div>
+
+            <form onSubmit={handleOnboard} className="space-y-4 pt-2">
+              <Input
+                label="Workspace Name"
+                placeholder="e.g. Acme Support Team"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                required
+                autoFocus
+                disabled={busy}
+              />
+              <Button type="submit" loading={busy} className="rd-primary w-full">
+                Activate Workspace
+              </Button>
+            </form>
+          </Card>
+        ) : (
+          /* Authentication Screen — Single clean card rendered by Clerk directly */
+          <div className="w-full flex flex-col items-center">
+            <div className="w-full flex justify-center">
+              {isSignUp ? (
+                <SignUp
+                  fallback={<AuthCardPlaceholder signUp />}
+                  routing="path"
+                  path="/app/sign-up"
+                  initialValues={invitation ? { emailAddress: invitation.email } : undefined}
+                  oauthFlow="popup"
+                  signInUrl={`/app/sign-in${search}`}
+                  forceRedirectUrl={signupRedirect}
+                />
+              ) : (
+                <SignIn
+                  fallback={<AuthCardPlaceholder />}
+                  routing="path"
+                  path="/app/sign-in"
+                  oauthFlow="popup"
+                  signUpUrl={`/app/sign-up${search}`}
+                  signUpForceRedirectUrl={signupRedirect}
+                  forceRedirectUrl={signupRedirect}
+                />
+              )}
+            </div>
+
+            {/* Discreet Team Invitation Link */}
+            {!inviteCode && (
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteJoin(!showInviteJoin)}
+                  className="text-xs text-text-tertiary hover:text-text-primary transition"
+                >
+                  {showInviteJoin ? 'Cancel invitation code' : 'Have a team invitation code?'}
+                </button>
+
+                <AnimatePresence>
+                  {showInviteJoin && (
+                    <motion.form
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const code = joinCode.trim().toUpperCase();
+                        if (code) window.location.assign(`/app?invite=${encodeURIComponent(code)}`);
+                      }}
+                      className="rd-panel rd-form mt-3 text-left"
+                    >
+                      <Input
+                        label="Invitation Code"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        placeholder="INV-XXXXXX"
+                        className="font-mono text-xs uppercase"
+                        required
+                        autoFocus
+                      />
+                      <Button type="submit" variant="secondary" size="sm" className="w-full">
+                        Redeem Invitation
+                      </Button>
+                    </motion.form>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Minimal Footer */}
+        <p className="rd-auth-footer mt-12 text-center text-xs text-text-tertiary">
+          ResolveDesk · Telegram Support Hub
+        </p>
       </div>
     </div>
   );
